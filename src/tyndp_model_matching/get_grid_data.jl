@@ -8,23 +8,23 @@
 # demand time series and list of generator types
 # scenario{String}, e.g. "NT2025"
 
-function get_grid_data(tyndp_version, scenario, year, climate_year)    
+function get_grid_data(tyndp_version, scenario, Year, climate_year)    
     if tyndp_version == "2020"
-        return get_grid_data_2020(scenario, year, climate_year)
+        return get_grid_data_2020(scenario, Year, climate_year)
     elseif tyndp_version == "2024"
-        return get_grid_data_2024(scenario, year, climate_year)
+        return get_grid_data_2024(scenario, Year, climate_year)
     else
         error("TYNDP version not supported")
     end
 end
 
-function get_grid_data_2020(scenario, year, climate_year)    
+function get_grid_data_2020(scenario, Year, climate_year)    
     # data source: https://www.entsoe.eu/Documents/TYNDP%20documents/TYNDP2020/Reference%20Grid%202025%20-%20TYNDP%202020.xlsx    
     file_lines = joinpath(BASE_DIR,"data_sources", "TYNDP2020","Reference Grid 2025 - TYNDP 2020.xlsx")
     # data source: https://2020.entsos-tyndp-scenarios.eu/wp-content/uploads/2020/06/TYNDP-2020-Scenario-Datafile.xlsx.zip
     file_data = joinpath(BASE_DIR,"data_sources", "TYNDP2020","TYNDP-2020-Scenario-Datafile.xlsx")
     # data source for all demand time series: https://tyndp.entsoe.eu/maps-data 
-    file_demand = joinpath(BASE_DIR,"data_sources", "TYNDP2020", join([scenario,year,"_Demand_CY1984.csv"]))
+    file_demand = joinpath(BASE_DIR,"data_sources", "TYNDP2020", join([scenario,Year,"_Demand_CY1984.csv"]))
 
     # Create dataframes from CSV/XLS files
     lines = XLSX.readtable(file_lines, "2025")

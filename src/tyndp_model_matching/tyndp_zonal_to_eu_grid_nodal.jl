@@ -10,8 +10,8 @@ function scale_generation!(tyndp_capacity, grid_data, scenario, climate_year, zo
         zone = gen["zone"]
 
         # Check if generator type exists in input data
-        if haskey(gen, "type")
-            type = gen["type"]
+        if haskey(gen, "type_tyndp")
+            type = gen["type_tyndp"]
         else
             print(g, "\n")
         end
@@ -35,8 +35,8 @@ function scale_generation!(tyndp_capacity, grid_data, scenario, climate_year, zo
         if zonal_tyndp_capacity !=0
             for (z, zone_) in grid_data["zonal_generation_capacity"]
                 if zone_["zone"] == zone
-                    scaling_factor = max(1, (zonal_tyndp_capacity / grid_data["baseMVA"] / zone_[type]) )
-                    if !exclude_offshore_wind
+                    scaling_factor = max(0, (zonal_tyndp_capacity / grid_data["baseMVA"] / zone_[type]) )
+                    if exclude_offshore_wind
                         if gen["type"] != "Offshore Wind"
                             gen["pmax"] = gen["pmax"] * scaling_factor
                         end
@@ -179,11 +179,11 @@ function hourly_grid_data!(grid_data, grid_data_orig, hour, timeseries_data)
             zone = load["zone"]
         end
         if haskey(timeseries_data["demand"], zone)
-            ratio = (timeseries_data["max_demand"][zone] / grid_data["baseMVA"]) / load["country_peak_load"]
+            max_demand = (timeseries_data["max_demand"][zone] / grid_data["baseMVA"])# / load["country_peak_load"]
             if zone == "NO1" || zone == "NO2" # comes from the weird tyndp data where the demand for the NO zones is somewhat aggregated!!!!!
                 ratio = ratio / 2
             end
-            load["pd"] =  timeseries_data["demand"][zone][hour] * grid_data_orig["load"][l]["pd"] * ratio
+            load["pd"] =  timeseries_data["demand"][zone][hour] * max_demand *load["powerportion"] #grid_data_orig["load"][l]["pd"] * ratio
         end
     end
     for (g, gen) in grid_data["gen"]
@@ -207,6 +207,22 @@ function hourly_grid_data!(grid_data, grid_data_orig, hour, timeseries_data)
             border["flow"] = flow
         end
     end
+    return grid_data
+end
+
+
+function hourly_grid_data_test!(grid_data, grid_data_orig, hour, timeseries_data)
+    for (l, load) in grid_data["load"]
+            load["pd"] =  timeseries_data["demand"][hour] * grid_data_orig["load"][l]["pd"]
+    end
+
+    for (g, gen) in grid_data["gen"]
+        if gen["source_id"][2] == 6
+            gen["pg"] =  timeseries_data["wind_offshore"][g][hour]* grid_data_orig["gen"][g]["pmax"]
+            gen["pmax"] =  timeseries_data["wind_offshore"][g][hour] * grid_data_orig["gen"][g]["pmax"]
+        end
+    end
+    
     return grid_data
 end
 

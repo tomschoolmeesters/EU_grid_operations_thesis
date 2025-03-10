@@ -54,15 +54,14 @@ function isolate_zones(grid_data, zones; border_slack = 0)
                 end
             end
         end
-    end
-
+    end    
+    
     for zone in zones
         for (g, gen) in grid_data["gen"]
             if haskey(gen, "zone") && gen["zone"] == zone
                 zone_data["gen"][g] = gen
             end
         end
-
         for (l, load) in grid_data["load"]
             if haskey(load, "zone") && load["zone"] == zone
                 zone_data["load"][l] = load
@@ -78,10 +77,11 @@ function isolate_zones(grid_data, zones; border_slack = 0)
         for (b, branch) in grid_data["branch"]
             f_bus = branch["f_bus"]
             t_bus = branch["t_bus"]
-            # Add any branch that has either the from or the to node connected to the isolated grid
-            if (haskey(zone_data["bus"], "$f_bus") && zone_data["bus"]["$f_bus"]["zone"]  == zone) || (haskey(zone_data["bus"], "$t_bus") && zone_data["bus"]["$t_bus"]["zone"] == zone)
+             # Add any branch that has either the from or the to node connected to the isolated grid
+             if (haskey(zone_data["bus"], "$f_bus") && zone_data["bus"]["$f_bus"]["zone"]  == zone) || (haskey(zone_data["bus"], "$t_bus") && zone_data["bus"]["$t_bus"]["zone"] == zone)
                 zone_data["branch"][b] = branch
             end
+            
         end
 
         for (c, conv) in grid_data["convdc"]
@@ -100,12 +100,12 @@ function isolate_zones(grid_data, zones; border_slack = 0)
                 zone_data["branchdc"][b] = branch
             end
         end
+
     end
     add_borders!(zone_data, grid_data, zones; border_slack = border_slack)
 
     return zone_data
 end
-
 
 # This function is to add remaining XB lines, converters etc. to the system
 function add_borders!(zone_data, grid_data, zones; border_slack = 0)
@@ -114,9 +114,9 @@ function add_borders!(zone_data, grid_data, zones; border_slack = 0)
     for zone in zones
         for (b, branch) in zone_data["branch"]
             if branch["interconnector"] == true
-            f_bus = branch["f_bus"]
-            t_bus = branch["t_bus"]
-            border_buses = [0 0]
+                f_bus = branch["f_bus"]
+                t_bus = branch["t_bus"]
+                border_buses = [0 0]
                 # As we already processed the interconnectors connected to XB nodes, we only want to have the ones that come from the neighboring zone to the XB node.  
                 if haskey(zone_data["bus"], "$f_bus") && !haskey(zone_data["bus"], "$t_bus")
                     border_buses = [0, grid_data["bus"]["$t_bus"]["zone"]  !== zone]
@@ -128,7 +128,7 @@ function add_borders!(zone_data, grid_data, zones; border_slack = 0)
                 if border_buses[1] == 1
                     border_bus = grid_data["bus"]["$f_bus"]
                     branch["direction"] = "to"
-                    xb_zone =grid_data["bus"]["$f_bus"]["zone"]   
+                    xb_zone =grid_data["bus"]["$f_bus"]["zone"]      
                 elseif border_buses[2] == 1
                     border_bus = grid_data["bus"]["$t_bus"]
                     branch["direction"] = "from" 

@@ -1,8 +1,14 @@
-function load_results(tyndp_version, scenario, year, climate_year; file_name = "result_zonal_tyndp")
-    result_file_name =   joinpath(BASE_DIR, "results", "TYNDP"*tyndp_version, file_name*"_"*scenario*year*"_"*climate_year*".json")
-    input_file_name =    joinpath(BASE_DIR, "results", "TYNDP"*tyndp_version, "input_zonal_tyndp_"*scenario*year*"_"*climate_year*".json")
-    scenario_file_name = joinpath(BASE_DIR, "results", "TYNDP"*tyndp_version, "scenario_zonal_tyndp_"*scenario*year*"_"*climate_year*".json")
+#function load_results(scenario, climate_year,zones,type)
+#    zones = join(zones,"_")
+#    result_file_name =   "./results/result_"*type*"_tyndp_"*scenario*"_"*climate_year*"_"*zones*".json"
+#    input_file_name =    "./results/input_"*type*"_tyndp_"*scenario*"_"*climate_year*"_"*zones*".json"
+#    scenario_file_name = "./results/scenario_"*type*"_tyndp_"*scenario*"_"*climate_year*"_"*zones*".json"
 
+function load_results(tyndp_version, scenario, year, climate_year, type)
+    result_file_name =   joinpath(BASE_DIR, "results", "TYNDP"*tyndp_version, "result_"*type*"_tyndp"*"_"*scenario*year*"_"*climate_year*".json")
+    input_file_name =    joinpath(BASE_DIR, "results", "TYNDP"*tyndp_version, "input_"*type*"_tyndp_"*scenario*year*"_"*climate_year*".json")
+    scenario_file_name = joinpath(BASE_DIR, "results", "TYNDP"*tyndp_version, "scenario_"*type*"_tyndp_"*scenario*year*"_"*climate_year*".json")
+    
     result = Dict()
     input_data = Dict()
     scenario_data = Dict()
@@ -14,6 +20,34 @@ function load_results(tyndp_version, scenario, year, climate_year; file_name = "
     scenario_data = JSON.parse(d)
 
     return result, input_data, scenario_data
+end
+
+function load_results_only(scenario, climate_year; file_name)
+    result_file_name =   "./results/"*file_name*"_"*scenario*"_"*climate_year*".json"
+    
+
+    result = Dict()
+    input_data = Dict()
+    scenario_data = Dict()
+    d = JSON.parsefile(result_file_name)
+    result = JSON.parse(d)
+  
+
+    return result
+end
+
+function load_results_only(scenario, climate_year; file_name)
+    result_file_name =   "./results/"*file_name*"_"*scenario*"_"*climate_year*".json"
+    
+
+    result = Dict()
+    input_data = Dict()
+    scenario_data = Dict()
+    d = JSON.parsefile(result_file_name)
+    result = JSON.parse(d)
+  
+
+    return result
 end
 
 

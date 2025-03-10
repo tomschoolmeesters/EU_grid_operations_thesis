@@ -133,7 +133,6 @@ function construct_data_dictionary_2024(ntcs, arcs, capacity, nodes, demand, sce
     
     for n in 1:size(nodes, 1)
         node_id = nodes.node_id[n]
-        print(node_id, "\n")
         nodal_data[node_id] = Dict{String, Any}()
         nodal_data[node_id]["index"] = n
         nodal_data[node_id]["demand"] = [get_demand_data(demand, node_id, hour) for hour in 1:8760]
@@ -145,14 +144,14 @@ function construct_data_dictionary_2024(ntcs, arcs, capacity, nodes, demand, sce
     
             if g == "Solar PV" 
                 pv_series = pv[pv[!, "area"] .== node_id, climate_year]
-                if !any(pv_series .=== missing) && !isempty(pv_series) && !isempty(nodal_data[node_id]["generation"][g]["capacity"])
+                if !any(pv_series .=== missing)  && !isempty(pv_series) && !isempty(nodal_data[node_id]["generation"][g]["capacity"])
                     nodal_data[node_id]["generation"][g]["timeseries"] =  pv_series .* nodal_data[node_id]["generation"][g]["capacity"]
                 else
                     nodal_data[node_id]["generation"][g]["timeseries"] = zeros(1, 8760)
                 end
             elseif g == "Onshore Wind"
                 wind_series = wind_onshore[wind_onshore[!, "area"] .== node_id, climate_year]
-                if  !any(wind_series .=== missing) && !isempty(wind_series) && !isempty(nodal_data[node_id]["generation"][g]["capacity"])
+                if  !any(wind_series .=== missing)  && !isempty(wind_series) && !isempty(nodal_data[node_id]["generation"][g]["capacity"])
                     nodal_data[node_id]["generation"][g]["timeseries"] =  wind_series .* nodal_data[node_id]["generation"][g]["capacity"]
                 else
                     nodal_data[node_id]["generation"][g]["timeseries"] = zeros(1, 8760)
@@ -207,6 +206,7 @@ function prepare_hourly_data!(data, nodal_data, hour)
         elseif gen["type"] == "Onshore Wind"
             gen["pmax"] = nodal_data[node]["generation"]["Onshore Wind"]["timeseries"][hour] / data["baseMVA"]
         elseif gen["type"] == "Offshore Wind"
+            println(node)
             gen["pmax"] = nodal_data[node]["generation"]["Offshore Wind"]["timeseries"][hour] / data["baseMVA"]
         elseif gen["type"] == "ENS"
             gen["pmax"] = nodal_data[node]["demand"][hour] / data["baseMVA"]
@@ -242,8 +242,58 @@ function prepare_mn_data(data, nodal_data, hours)
 
     return mn_data
 end
+
+function prepare_mn_data_nodal(grid_data,timeseries_data,hours)
+    mn_data = _IM.replicate(grid_data, length(hours), Set{String}(["source_type", "name", "source_version", "per_unit"]))
     
-    
+    for h_idx in 1:length(hours)
+        hour = hours[h_idx]
+        for (l, load) in mn_data["nw"]["$h_idx"]["load"]
+            if haskey(load, "country_name")
+                zone = load["country_name"]
+            else
+                zone = load["zone"]
+            end
+            if haskey(timeseries_data["demand"], zone)
+                max_demand = (timeseries_data["max_demand"][zone] / grid_data["baseMVA"])# / load["country_peak_load"]
+                if zone == "NO1" || zone == "NO2" # comes from the weird tyndp data where the demand for the NO zones is somewhat aggregated!!!!!
+                    ratio = ratio / 2
+                end
+                load["pd"] =  timeseries_data["demand"][zone][hour] * max_demand *load["powerportion"] #grid_data["load"][l]["pd"] * ratio
+            end
+        end
+
+        for (g, gen) in mn_data["nw"]["$h_idx"]["gen"]
+            zone = gen["zone"]
+            if gen["type_tyndp"] == "Onshore Wind" && haskey(timeseries_data["wind_onshore"], zone)
+                gen["pg"] =  timeseries_data["wind_onshore"][zone][hour] * grid_data["gen"][g]["pmax"] 
+                gen["pmax"] =  timeseries_data["wind_onshore"][zone][hour]* grid_data["gen"][g]["pmax"]
+            elseif gen["type_tyndp"] == "Offshore Wind" && haskey(timeseries_data["wind_offshore"], zone)
+                gen["pg"] =  timeseries_data["wind_offshore"][zone][hour]* grid_data["gen"][g]["pmax"]
+                gen["pmax"] =  timeseries_data["wind_offshore"][zone][hour] * grid_data["gen"][g]["pmax"]
+            elseif gen["type_tyndp"] == "Solar PV" && haskey(timeseries_data["solar_pv"], zone)
+                gen["pg"] =  timeseries_data["solar_pv"][zone][hour] * grid_data["gen"][g]["pmax"]
+                gen["pmax"] =  timeseries_data["solar_pv"][zone][hour] * grid_data["gen"][g]["pmax"]
+            end
+        end
+
+        for (b, border) in mn_data["nw"]["$h_idx"]["borders"]
+            flow = timeseries_data["xb_flows"][border["name"]]["flow"][1, hour]
+            if abs(flow) > border["border_cap"]
+                border["flow"] = sign(flow) * border["border_cap"] * 0.95  # to avoid numerical infeasibility & compensate for possible HVDC losses
+            else
+                border["flow"] = flow
+            end
+        end
+    end
+    return mn_data
+end
+
+
+
+
+
+
 function add_gen!(data, g_idx, g, gen_costs, emission_factor, inertia_constants, n, nodal_data, node_id; co2_cost = 0.0, ens = false)
     data["gen"]["$g_idx"] = Dict{String, Any}()
     data["gen"]["$g_idx"]["gen_bus"] = n

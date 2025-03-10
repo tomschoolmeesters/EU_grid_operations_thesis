@@ -5,28 +5,23 @@
 #############################################################################
 
 function load_res_data()
- ## RES TIME SERIES as feather files (~ 350 MB)
- # DOWNLOAD FILES AND ADD THEM TO YOUR data_sources FOLDER
- # wind_onshore_file_link = "https://zenodo.org/record/3702418/files/PECD-MAF2019-wide-WindOnshore.feather?download=1"
- # wind_offhore_file_link = "https://zenodo.org/record/3702418/files/PECD-MAF2019-wide-WindOffshore.feather?download=1"
- # pv_file_link = "https://zenodo.org/record/3702418/files/PECD-MAF2019-wide-PV.feather?download=1" 
-
- path = BASE_DIR
- # If files are saved locally under folder scenarios
- file_wind_onshore  = joinpath(path, "data_sources", "PECD-MAF2019-wide-WindOnshore.feather")
- file_wind_offshore = joinpath(path, "data_sources", "PECD-MAF2019-wide-WindOffshore.feather")
- file_pv            = joinpath(path, "data_sources", "PECD-MAF2019-wide-PV.feather")                 
-
- pv = Feather.read(file_pv) 
- wind_onshore = Feather.read(file_wind_onshore)
- wind_offshore = Feather.read(file_wind_offshore)
- # Alternatively one can use to download data: (this might take a couple of minutes)
- # pv = Feather.read(download(pv_file_link))
- # wind_onshore = Feather.read(download(wind_onshore_file_link))
- # wind_offshore = Feather.read(download(wind_offshore_file_link))
-
- return pv, wind_onshore, wind_offshore
-end
+    ## RES TIME SERIES as feather files (~ 350 MB)
+    # DOWNLOAD FILES AND ADD THEM TO YOUR data_sources FOLDER
+    # wind_onshore_file_link = "https://zenodo.org/record/3702418/files/PECD-MAF2019-wide-WindOnshore.feather?download=1"
+    # wind_offhore_file_link = "https://zenodo.org/record/3702418/files/PECD-MAF2019-wide-WindOffshore.feather?download=1"
+    # pv_file_link = "https://zenodo.org/record/3702418/files/PECD-MAF2019-wide-PV.feather?download=1" 
+   
+    # If files are saved locally under folder scenarios
+    file_wind_onshore  = "./data_sources/PECD-MAF2019-wide-WindOnshore.feather"
+    file_wind_offshore = "./data_sources/PECD-MAF2019-wide-WindOffshore.feather"
+    file_pv            = "./data_sources/PECD-MAF2019-wide-PV.feather"                 
+   
+    pv = Feather.read(file_pv) 
+    wind_onshore = Feather.read(file_wind_onshore)
+    wind_offshore = Feather.read(file_wind_offshore)
+   
+    return pv, wind_onshore, wind_offshore
+   end
 
 function process_RES_time_series(wind_onshore,wind_offshore,pv,corrected_year) # corrected year makes sure you are calling the right year from the Feather files, it is defined as corrected_year = parse(Int64,year) - 1982 + 5 # 1982 corresponds to the 5th column
     RES_zones = Dict{String,Any}()
