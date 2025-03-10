@@ -33,12 +33,16 @@ use_case = "be_uk_de_nl_fr_dk_no"
 hour_start = 1
 hour_end = 8760
 isolated_zones = ["NO1","NO2","NO3","NO4","NO5","BE","FR","UK","DE","NL","DK2","DK1"]#["BE","FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]
+relocate_wind = true
 
 ############ LOAD EU grid data ############
 file = "./data_sources/European_grid_no_nseh.json"
 output_file_name = joinpath("results", join([use_case,"_",scenario,"_", climate_year]))
 gurobi = Gurobi.Optimizer
 EU_grid = _PM.parse_file(file)
+if relocate_wind
+  update_input_data(EU_grid)
+end
 _PMACDC.process_additional_data!(EU_grid)
 _EUGO.add_load_and_pst_properties!(EU_grid)
 
