@@ -24,8 +24,9 @@ import Plots
 using EU_grid_operations; const _EUGO = EU_grid_operations
 gurobi = JuMP.optimizer_with_attributes(Gurobi.Optimizer)
 
+
 # Select input paramters for:
-# TYNDP 2020:
+# # TYNDP 2020:
 #  - Scenario selection: Distributed Energy (DE), National Trends (NT), Global Ambition (GA)
 #  - Planning years: 2025 (NT only), 2030, 2040
 #  - Climate year: 1982, 1984, 2007
@@ -44,6 +45,7 @@ number_of_hours = 8760
 scenario = "DE"
 year = "2050"
 climate_year = "2009"
+
 # A sample set for TYNDP 2020
 # tyndp_version = "2020"
 # fetch_data = true
@@ -55,7 +57,7 @@ climate_year = "2009"
 hours = 1:8760
 ns_wind_power = 300e3 # in MW
 file_name = "NSOW_zonal"
-co2_cost = 45
+co2_cost = 50
 
 # Load grid and scenario data
 if fetch_data == true

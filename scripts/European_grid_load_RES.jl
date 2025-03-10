@@ -31,14 +31,14 @@ _PMACDC.process_additional_data!(test_grid)
 ############################
 # include time series
 pv, wind_onshore, wind_offshore = load_res_data()
-year = "1984"
+Year = "1984"
 scenario = "DE2030"
 number_of_hours = 8760
 
-corrected_year = parse(Int64,year) - 1982 + 5 # 1982 corresponds to the 5th column
+corrected_year = parse(Int64,Year) - 1982 + 5 # 1982 corresponds to the 5th column
 
 RES_time_series = process_RES_time_series(wind_onshore,wind_offshore,pv,corrected_year)
-load_zones = add_load_series(scenario,year,1,number_of_hours)
+load_zones = add_load_series(scenario,Year,1,number_of_hours)
 
 RES_time_series_adjusted = adjust_time_series(RES_time_series)
 EU_grid_adjusted = zones_alignment(EU_grid)

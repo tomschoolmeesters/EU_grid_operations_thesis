@@ -2,7 +2,8 @@
 #  main.jl
 # Author: Hakan Ergun 24.03.2022
 # Script to solve the hourly ecomic dispatch problem for the TYNDP 
-# reference grid based on NTC and provided genreation capacities
+# reference grid based on NTC and provided generation capacities
+# reference grid based on NTC and provided generation capacities
 # RES and demand time series
 #######################################
 
@@ -18,6 +19,8 @@ import Gurobi
 import Feather
 import PowerModels; const _PM = PowerModels
 import JSON
+using Plots
+using Plots
 using EU_grid_operations; const _EUGO = EU_grid_operations
 
 # Select your favorite solver
@@ -41,31 +44,33 @@ solver = JuMP.optimizer_with_attributes(Gurobi.Optimizer, "OutputFlag" => 0)
 # Fetch data: true/false, to parse input data (takes ~ 1 min.)
 
 # A sample set for TYNDP 2024
-tyndp_version = "2024"
-fetch_data = true
-number_of_hours = 8760
-scenario = "DE"
-year = "2050"
-climate_year = "2009"
+#tyndp_version = "2024"
+#fetch_data = true
+#number_of_hours = 300
+#scenario = "DE"
+#year = "2030"
+#climate_year = "2009"
+
 # A sample set for TYNDP 2020
-# tyndp_version = "2020"
-# fetch_data = true
-# number_of_hours = 8760
-# scenario = "DE"
-# year = "2040"
-# climate_year = "2007"
+ tyndp_version = "2020"
+ fetch_data = true
+ number_of_hours = 8760
+ scenario = "NT"
+ year = "2025"
+ climate_year = "1984"
 
 
 # Load grid and scenario data
 if fetch_data == true
-    pv, wind_onshore, wind_offshore = _EUGO.load_res_data()
-    ntcs, nodes, arcs, capacity, demand, gen_types, gen_costs, emission_factor, inertia_constants, node_positions = _EUGO.get_grid_data(tyndp_version, scenario, year, climate_year)
+  pv, wind_onshore, wind_offshore = _EUGO.load_res_data()
+  ntcs, nodes, arcs, capacity, demand, gen_types, gen_costs, emission_factor, inertia_constants, node_positions = _EUGO.get_grid_data(tyndp_version, scenario, year, climate_year)
 end
+
+
 
 # Construct input data dictionary in PowerModels style 
 input_data, nodal_data = _EUGO.construct_data_dictionary(tyndp_version, ntcs, arcs, capacity, nodes, demand, scenario, climate_year, gen_types, pv, wind_onshore, wind_offshore, gen_costs, emission_factor, inertia_constants, node_positions)
 
-# Make copy of input data dictionary as RES and demand data updated for each hour
 input_data_raw = deepcopy(input_data)
 
 
@@ -73,14 +78,15 @@ print("######################################", "\n")
 print("### STARTING HOURLY OPTIMISATION ####", "\n")
 print("######################################", "\n")
 
+
 # Create dictionary for writing out results
 result = Dict{String, Any}("$hour" => nothing for hour in 1:number_of_hours)
-for hour = 1:number_of_hours
-    print("Hour ", hour, " of ", number_of_hours, "\n")
+for hour = start_hour:(start_hour+number_of_hours-1)
+    print("Hour ", hour, " of ", start_hour+number_of_hours-1, "\n")
     # Write time series data into input data dictionary
     _EUGO.prepare_hourly_data!(input_data, nodal_data, hour)
     # Solve Network Flow OPF using PowerModels
-    result["$hour"] = _PM.solve_opf(input_data, PowerModels.NFAPowerModel, solver) 
+    result["$hour"] = _PM.solve_opf(input_data, PowerModels.NFAPowerModel, solver)
 end
 
 ## Write out JSON files
@@ -104,3 +110,18 @@ json_string = JSON.json(nodal_data)
 open(scenario_file_name,"w") do f
   JSON.print(f, json_string)
 end
+
+#Generating a plot
+
+using Plots
+gen = []
+for i in start_hour:(start_hour+number_of_hours-1)
+    if !isnan(result["$i"]["objective"])
+    push!(gen,result["$i"]["solution"]["gen"]["1085"]["pg"])
+    end
+end
+p=plot(gen)
+Plots.xlabel!("Hour of the day")
+Plots.ylabel!("Active power")
+#file = "./results/result_zonal_tyndp_", scenario,"_", climate_year
+#Plots.savefig(p, file)

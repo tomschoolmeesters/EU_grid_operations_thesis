@@ -6,10 +6,6 @@
 # RES and demand time series
 #######################################
 
-
-######### IMPORTANT: YOU WILL NEED TO DOWNLOAD THE FEATHER FILES AND ADD THEM TO YOUR data_sources FOLDER!!!!!!!
-######### See data_sources/download_links.txt for the download links
-
 # Import packages and create short names
 import DataFrames; const _DF = DataFrames
 import CSV
@@ -17,6 +13,7 @@ import JuMP
 import Gurobi
 import Feather
 import PowerModels; const _PM = PowerModels
+import PowerModelsACDC; const _PMACDC = PowerModelsACDC
 import InfrastructureModels; const _IM = InfrastructureModels
 import JSON
 import CbaOPF
@@ -42,62 +39,56 @@ gurobi = JuMP.optimizer_with_attributes(Gurobi.Optimizer)
 # Fetch data: true/false, to parse input data (takes ~ 1 min.)
 
 # A sample set for TYNDP 2024
-#tyndp_version = "2024"
+#tyndp_version = "2020"
 #fetch_data = true
-#number_of_hours = 100
+#number_of_hours = 8760
 #scenario = "DE"
-#year = "2050"
-#climate_year = "2009"
-#hours = 1:100
+#Year = "2040"
+#climate_year = "2007"
+#hours = 1:2
 
 # A sample set for TYNDP 2020
- tyndp_version = "2020"
- fetch_data = true
- number_of_hours = 100
- scenario = "DE"
- year = "2040"
- climate_year = "2007"
- hours = 1:100
+# tyndp_version = "2020"
+# fetch_data = true
+# number_of_hours = 8760
+# scenario = "DE"
+# year = "2040"
+# climate_year = "2007"
 
 
 # Load grid and scenario data
 if fetch_data == true
     pv, wind_onshore, wind_offshore = _EUGO.load_res_data()
-    ntcs, nodes, arcs, capacity, demand, gen_types, gen_costs, emission_factor, inertia_constants, node_positions = _EUGO.get_grid_data(tyndp_version, scenario, year, climate_year)
+    ntcs, nodes, arcs, capacity, demand, gen_types, gen_costs, emission_factor, inertia_constants, node_positions = _EUGO.get_grid_data(tyndp_version, scenario, Year, climate_year)
 end
 
-# Construct input data dictionary in PowerModels style 
-# Construct RES time and demand series, installed capacities on nodal (zonal) data
-input_data, nodal_data = _EUGO.construct_data_dictionary(tyndp_version, ntcs, arcs, capacity, nodes, demand, scenario, climate_year, gen_types, pv, wind_onshore, wind_offshore, gen_costs, emission_factor, inertia_constants, node_positions)
 
-input_data_raw = deepcopy(input_data)
+nodal_input["ne_branch"] = branches
 
-for (b, branch) in input_data["branch"]
+for (b, branch) in nodal_input["ne_branch"]
     branch["delta_cap_max"] = branch["rate_a"] * 2 # for testing.....
-    distance = _EUGO.latlon2distance(input_data, branch)
-    branch["capacity_cost"] = 300e5 * input_data["baseMVA"] / (25 * 8760) # for testing, update with more realistic numbers.....
+    #distance = _EUGO.latlon2distance(nodal_input, branch)
+    branch["capacity_cost"] = 300e5 * nodal_input["baseMVA"] / (25 * 8760) # for testing, update with more realistic numbers.....
+    branch["construction_cost"] = 5;
 end
 
-
-# input_data["branch"]["173"]["rate_a"] = input_data["branch"]["173"]["rate_a"] * 2
-
-for (l, load) in input_data["load"]
+for (l, load) in nodal_input["load"]
     load["pred_rel_max"] = 0
-    load["cost_red"] = 10e5 * input_data["baseMVA"]
-    load["cost_curt"] = 10e5 * input_data["baseMVA"]
+    load["cost_red"] = 10e5 * nodal_input["baseMVA"]
+    load["cost_curt"] = 10e5 * nodal_input["baseMVA"]
     load["flex"] = 1
 end
 
-
 # Create dictionary for writing out results
-print("######################################", "\n")
-print("####### PREPARING DATA      ##########", "\n")
-@time mn_input_data = _EUGO.prepare_mn_data(input_data, nodal_data, hours)
+#print("######################################", "\n")
+#print("####### PREPARING DATA      ##########", "\n")
+#@time mn_input_data = _EUGO.prepare_mn_data(nodal_input, nodal_data, hours)
 
 print("######################################", "\n")
 print("####### STARTING OPTIMISATION#### ####", "\n")
-@time result = CbaOPF.solve_zonal_tnep(mn_input_data, _PM.NFAPowerModel, gurobi; multinetwork = true) 
+#@time result = CbaOPF.solve_nodal_tnep(mn_data, _PM.NFAPowerModel, gurobi; multinetwork = true) 
 
+_PMACDC.run_mp_tnepopf(nodal_input,_PM.NFAPowerModel,gurobi)
 
 cap  = zeros(1, maximum(parse.(Int, collect(keys(input_data["branch"])))))
 for (n, network) in result["solution"]["nw"]
