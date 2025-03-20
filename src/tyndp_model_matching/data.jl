@@ -257,7 +257,7 @@ function prepare_mn_data_nodal(grid_data,timeseries_data,hours)
             if haskey(timeseries_data["demand"], zone)
                 max_demand = (timeseries_data["max_demand"][zone] / grid_data["baseMVA"])# / load["country_peak_load"]
                 if zone == "NO1" || zone == "NO2" # comes from the weird tyndp data where the demand for the NO zones is somewhat aggregated!!!!!
-                    ratio = ratio / 2
+                    max_demand = max_demand / 2
                 end
                 load["pd"] =  timeseries_data["demand"][zone][hour] * max_demand *load["powerportion"] #grid_data["load"][l]["pd"] * ratio
             end

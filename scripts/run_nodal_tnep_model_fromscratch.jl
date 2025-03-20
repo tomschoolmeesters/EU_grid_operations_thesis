@@ -12,6 +12,7 @@ import JSON
 import CbaOPF
 import Plots
 using EU_grid_operations; const _EUGO = EU_grid_operations
+import XLSX
 include("Pre-Processor/Pre-Processor_Cable pool.jl")
 
 
@@ -48,19 +49,23 @@ include("Pre-Processor/Pre-Processor_Cable pool.jl")
  number_of_hours = 144
  scenario = "DE"
  year = "2040"
- climate_year = "2007"
- hours = 1:144
+ climate_year = "1984"
+ hours = 1:1
  load_data = true
- use_case = "be_uk_de_nl_fr"
+ use_case = "North_Sea_reloc"
  hour_start = 1
- hour_end = 144
- isolated_zones = ["BE","UK","DE","NL","FR"]#["BE","FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]
+ hour_end = 1
+ isolated_zones = ["DE"]#,"FR","UK","DE","NL","DK2","DK1"]#["BE","FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]
+relocate_wind = true
 
 ############ LOAD EU grid data ############
 file = "./data_sources/European_grid_no_nseh.json"
 output_file_name = joinpath("results", join([use_case,"_",scenario,"_", climate_year]))
 gurobi = Gurobi.Optimizer
 EU_grid = _PM.parse_file(file)
+if relocate_wind
+    update_input_data(EU_grid)
+end
 _PMACDC.process_additional_data!(EU_grid)
 _EUGO.add_load_and_pst_properties!(EU_grid)
 
@@ -79,7 +84,8 @@ print("----------------------","\n")
 zone_mapping = _EUGO.map_zones()
 
 # Scale generation capacity based on TYNDP data
-_EUGO.scale_generation!(tyndp_capacity, EU_grid, scenario, climate_year, zone_mapping)
+scenario_id = "$scenario$year"
+_EUGO.scale_generation!(tyndp_capacity, EU_grid, scenario_id, climate_year, zone_mapping)
 
 # Isolate zone: input is vector of strings, if you need to relax the fixing border flow assumptions use:
 # _EUGO.isolate_zones(EU_grid, ["DE"]; border_slack = x), this will leas to (1-slack)*xb_flow_ref < xb_flow < (1+slack)*xb_flow_ref
@@ -90,13 +96,17 @@ zone_grid = _EUGO.isolate_zones(EU_grid, isolated_zones, border_slack = 0.01) #y
 ##############################################
 #Run this to load the right simulation scenario
     
-nodal_result, nodal_input, timeseries_data = _EUGO. load_results(tyndp_version, scenario, year, climate_year, "nodal") # Import nodal results
+nodal_result, nodal_input, timeseries_data = _EUGO.load_results(tyndp_version, scenario, year, climate_year, "nodal") # Import nodal results
 
 print("ALL NODAL FILES LOADED", "\n")
 print("----------------------","\n")
-
+zone_grid = deepcopy(nodal_input)
 # Generate (new)corridors and add to zone_grid
-@time zone_grid = candidate_lines(zone_grid,number_of_hours)
+@time zone_grid = candidate_lines(nodal_input,nodal_result,new_DC_buses,number_of_hours)
+
+    
+plot_filename = joinpath("results", join(["grid_input_candidates_tnep",use_case,".pdf"]))
+plot_grid_candidates(zone_grid,plot_filename)
 
 
 for (g_id,g) in zone_grid["gen"]
@@ -155,11 +165,11 @@ print("####### STARTING OPTIMISATION ########", "\n")
 
 gurobi = JuMP.optimizer_with_attributes(
     Gurobi.Optimizer,
-    "TimeLimit" => 28800,        # Maximaal 300 seconden 8 hours
-    "MIPGap" => 0.01,         # Stop als de gap kleiner is dan 12% 0.01
-)
+    "TimeLimit" => 240,        # Maximaal 300 seconden 8 hours
+    "MIPGap" => 0.01)         # Stop als de gap kleiner is dan 12% 0.01
 
-s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => true, "fix_cross_border_flows" => false, "process_data_internally" => false)
+
+s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => true, "fix_cross_border_flows" => true, "process_data_internally" => false)#, "borders"=>[1,2,3,4,5,6,7,8,9,10,11,12])
 @time result = _PMACDC.run_mp_tnepopf(mn_input_data,_PM.DCPPowerModel, gurobi, multinetwork = true; setting = s)
 
 plot_filename = joinpath("results", join(["grid_input_tnep",use_case,".pdf"]))

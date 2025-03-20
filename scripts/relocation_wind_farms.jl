@@ -1,6 +1,4 @@
-function update_OFFwind_data()
 
-end
 function relocation_wind_farms()
 
     file = "./data_sources/Relocation_WindFarms.xlsx"
@@ -55,13 +53,13 @@ function add_OFF_DC_buses!(input_data)
 
     max_groups_dict = Dict(
         "BE" => 2,
-        "DE" => 15,
+        "DE" => 5,
         "DK1" => 3,
-        "DK2" => 8,
+        "DK2" => 3,
         "FR" => 4,
-        "NL" => 10,
+        "NL" => 7,
         "NO1" => 1,
-        "UK" => 13)
+        "UK" => 6)
 
     new_DC_buses = Dict{String,Any}()
     for zone in keys(relocation_dict)
@@ -72,8 +70,10 @@ function add_OFF_DC_buses!(input_data)
         for (i,dc_bus) in DC_bus
             idx = dc_bus["idx"]
             new_DC_buses["$idx"] = Dict{String,Any}()
+            new_DC_buses["$idx"]["index"] = idx
             new_DC_buses["$idx"]["lat"] = dc_bus["lat"]
             new_DC_buses["$idx"]["lon"] = dc_bus["lon"]
+            new_DC_buses["$idx"]["zone"] = zone
         end
     end
 
@@ -93,13 +93,22 @@ function update_input_data(input_data)
     end
 
     # Kies een referentiebus willekeurig
-    reference_key = rand(keys(input_data["bus"]))
-    println("Reference key: $reference_key")
-    reference_bus = deepcopy(input_data["bus"]["$reference_key"])  # Verwijder de string-interpolatie
+    reference_key_AC = rand(keys(input_data["bus"]))#"3935"#Base kv = 225#rand(keys(input_data["bus"]))
+    reference_key_DC = rand(keys(input_data["busdc"]))#"10168"#BAse kv =500, rand(keys(input_data["busdc"]))
+    reference_key_conv = rand(keys(input_data["convdc"]))#"32"#rand(keys(input_data["convdc"]))
+    reference_key_acbranch = rand(keys(input_data["branch"]))#"4304" #rand(keys(input_data["branch"]))
+    println("Reference key for AC: $reference_key_AC")
+    println("Reference key for DC: $reference_key_DC")
+    println("Reference key for converter: $reference_key_conv")
+    println("Reference key for ac branch: $reference_key_acbranch")
+    reference_bus_AC = deepcopy(input_data["bus"]["$reference_key_AC"])  
+    reference_bus_DC = deepcopy(input_data["busdc"]["$reference_key_DC"])
+    reference_conv = deepcopy(input_data["convdc"]["$reference_key_conv"])
+    reference_acbranch = deepcopy(input_data["branch"]["$reference_key_acbranch"])
 
     # Verwerk de relocation_dict per zone
     for zone in keys(relocation_dict)
-        for (g_id, gen) in relocation_dict["$zone"]  # Verwijder de string-interpolatie
+        for (g_id, gen) in relocation_dict["$zone"]  
             new_gen_bus = relocation_dict["$zone"]["$g_id"]["gen_bus"]
             
             if !haskey(input_data["bus"], new_gen_bus)
@@ -109,7 +118,7 @@ function update_input_data(input_data)
                 name = relocation_dict["$zone"]["$g_id"]["name"]
                 
                 # Voeg de nieuwe bus toe aan input_data
-                input_data["bus"]["$new_gen_bus"] = deepcopy(reference_bus)
+                input_data["bus"]["$new_gen_bus"] = deepcopy(reference_bus_AC)
                 input_data["bus"]["$new_gen_bus"]["lat"] = latitude
                 input_data["bus"]["$new_gen_bus"]["lon"] = longitude
                 input_data["bus"]["$new_gen_bus"]["zone"] = zone
@@ -135,15 +144,121 @@ function update_input_data(input_data)
                 end
             end
         end
+    end
+    
+    #Maak nieuwe AC bussen
+    AC_number = maximum([bus["index"] for (b, bus) in input_data["bus"]]) + 1
+    Conv_number = maximum([conv["index"] for (c, conv) in input_data["convdc"]]) + 1
+    ACbranch_number = maximum([branch["index"] for (b, branch) in input_data["branch"]]) + 1
 
-        #Maak nieuwe AC bussen
-        #Maak verbindingen AC to shore
+    for (b_id,bus) in new_DC_buses
+
+        dc_index = bus["index"]
+        latitude = bus["lat"]
+        longitude = bus["lon"]
+        zone = bus["zone"]
+        name_AC = "$zone$AC_number"
+
+        input_data["bus"]["$AC_number"] = deepcopy(reference_bus_AC)
+        input_data["bus"]["$AC_number"]["lat"] = latitude
+        input_data["bus"]["$AC_number"]["lon"] = longitude
+        input_data["bus"]["$AC_number"]["zone"] = zone
+        input_data["bus"]["$AC_number"]["bus_i"] = AC_number
+
+        # Als naam beschikbaar is, gebruik deze, anders standaard naam
+        if name_AC !== nothing
+            input_data["bus"]["$AC_number"]["name"] = name_AC
+        else
+            input_data["bus"]["$AC_number"]["name"] = "$zone$AC_number"
+        end
         
-        #Maak nieuwe DC bussen
-        #Maak nieuwe convertoren
-        #Maak verbindingen AC/DC
+        # Stel het land in voor de bus
+        input_data["bus"]["$AC_number"]["country"] = country_dict[zone]
+
+        # Als "source_id" een array is, update het tweede element
+        input_data["bus"]["$AC_number"]["source_id"][2] = AC_number
+        input_data["bus"]["$AC_number"]["index"] = AC_number
+
+        
+
+        name_DC = "$zone$dc_index"
+        input_data["busdc"]["$dc_index"] = deepcopy(reference_bus_DC)
+        input_data["busdc"]["$dc_index"]["lat"] = latitude
+        input_data["busdc"]["$dc_index"]["lon"] = longitude
+        input_data["busdc"]["$dc_index"]["name"] = name_DC
+        input_data["busdc"]["$dc_index"]["source_id"][2] = dc_index
+        input_data["busdc"]["$dc_index"]["busdc_i"] = dc_index
+        input_data["busdc"]["$dc_index"]["index"] = dc_index
+        input_data["busdc"]["$dc_index"]["zone"] = country_dict[zone]
+
+        input_data["convdc"]["$Conv_number"] = deepcopy(reference_conv)
+        input_data["convdc"]["$Conv_number"]["busdc_i"] = dc_index
+        input_data["convdc"]["$Conv_number"]["busac_i"] = AC_number
+        input_data["convdc"]["$Conv_number"]["index"] = Conv_number 
+        input_data["convdc"]["$Conv_number"]["source_id"][2] = Conv_number
+        #input_data["convdc"]["$Conv_number"]["Pacmax"] = 40
+        #input_data["convdc"]["$Conv_number"]["Qacrated"] = 40
+        #input_data["convdc"]["$Conv_number"]["Pacrated"] = 40
+        #input_data["convdc"]["$Conv_number"]["Qacmax"] = 40
+        #input_data["convdc"]["$Conv_number"]["Qacmin"] = -40
+        #input_data["convdc"]["$Conv_number"]["Pacmax"] = 40
+        #input_data["convdc"]["$Conv_number"]["Pacmin"] = 40
+        #input_data["convdc"]["$Conv_number"]["Imax"] = 4000
+        #input_data["convdc"]["$Conv_number"]["basekVac"] = 225
+
+        AC_number += 1
+        Conv_number += 1
+
+
 
     end
+
+    corr_DC_bus_set = Vector()
+    corr_DC_bus = 0
+    new_branches = Dict{String,Any}()
+    for zone in keys(relocation_dict)
+        for (g_id, gen) in relocation_dict["$zone"]
+            new_gen_bus = relocation_dict["$zone"]["$g_id"]["gen_bus"]
+            push!(corr_DC_bus_set,corr_DC_bus)
+            corr_DC_bus = relocation_dict["$zone"]["$g_id"]["corresponding_DCbus"]
+            DC_to_ACbus = 0
+            for (c,conv) in input_data["convdc"]
+                if conv["busdc_i"] == corr_DC_bus
+                    DC_to_ACbus = conv["busac_i"]
+                end
+            end
+            
+            input_data["branch"]["$ACbranch_number"] = deepcopy(reference_acbranch)
+            input_data["branch"]["$ACbranch_number"]["source_id"][2] = ACbranch_number
+            input_data["branch"]["$ACbranch_number"]["f_bus"] = new_gen_bus
+            input_data["branch"]["$ACbranch_number"]["t_bus"] = DC_to_ACbus
+            input_data["branch"]["$ACbranch_number"]["index"] = ACbranch_number
+            input_data["branch"]["$ACbranch_number"]["interconnector"] = false
+            input_data["branch"]["$ACbranch_number"]["transformer"] = false
+            new_branches["$ACbranch_number"] = deepcopy(input_data["branch"]["$ACbranch_number"])
+            ACbranch_number +=1
+
+            if !(corr_DC_bus in corr_DC_bus_set)
+                old_gen_bus = relocation_dict["$zone"]["$g_id"]["old_gen_bus"] #AC bus
+                input_data["branch"]["$ACbranch_number"] = deepcopy(reference_acbranch)
+                input_data["branch"]["$ACbranch_number"]["source_id"][2] = ACbranch_number
+                input_data["branch"]["$ACbranch_number"]["f_bus"] = DC_to_ACbus
+                input_data["branch"]["$ACbranch_number"]["t_bus"] = old_gen_bus
+                input_data["branch"]["$ACbranch_number"]["index"] = ACbranch_number
+                input_data["branch"]["$ACbranch_number"]["interconnector"] = false
+                input_data["branch"]["$ACbranch_number"]["transformer"] = false
+                new_branches["$ACbranch_number"] = deepcopy(input_data["branch"]["$ACbranch_number"])
+
+                ACbranch_number +=1
+            end
+            
+        end
+
+        
+    end    
+    println(corr_DC_bus_set)
+    return new_DC_buses, relocation_dict, new_branches
+
 end
 
 function check_OFFwind_capacities(EU_grid,zone,tyndp_version,scenario,climate_year)
@@ -201,7 +316,7 @@ function plot_OFFwind_capacities(input_data,zone,tyndp_version,scenario,climate_
 
     # Plot the capacities
     P1 = Plots.bar()
-    Plots.bar!(years,capacities,title="Offshore Wind Capacities for $zone" , xlabel="Year", ylabel="Capacity (MW)",legend=false)
+    Plots.bar!(years,(capacities/1000),title="Offshore Wind Capacities for $zone" , xlabel="Year", ylabel="Capacity (GW)",legend=false,guidefont=12, xtickfont=12, ytickfont=12)
 
     display(P1)
 end

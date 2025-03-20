@@ -21,18 +21,19 @@ using XLSX
 using Statistics
 using Clustering
 using StatsBase
+using SparseArrays
 import StatsPlots
 
 ######### DEFINE INPUT PARAMETERS
 tyndp_version = "2020"
 scenario = "DE"
-Year = "2040"
+year = "2040"
 climate_year = "1984"
 load_data = true
-use_case = "be_uk_de_nl_fr_dk_no"
+use_case = "North_Sea_reloc"
 hour_start = 1
-hour_end = 8760
-isolated_zones = ["NO1","NO2","NO3","NO4","NO5","BE","FR","UK","DE","NL","DK2","DK1"]#["BE","FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]
+hour_end = 144
+isolated_zones = ["DE"]#,"FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]#["BE","FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]
 relocate_wind = true
 
 ############ LOAD EU grid data ############
@@ -41,15 +42,15 @@ output_file_name = joinpath("results", join([use_case,"_",scenario,"_", climate_
 gurobi = Gurobi.Optimizer
 EU_grid = _PM.parse_file(file)
 if relocate_wind
-  update_input_data(EU_grid)
+  new_DC_buses, relocation_dict, new_branches = update_input_data(EU_grid)
 end
 _PMACDC.process_additional_data!(EU_grid)
 _EUGO.add_load_and_pst_properties!(EU_grid)
 
 #### LOAD TYNDP SCENARIO DATA ##########
 if load_data == true
-    zonal_result, zonal_input, scenario_data = _EUGO.load_results(tyndp_version, scenario, Year, climate_year,"zonal") # Import zonal results
-    ntcs, zones, arcs, tyndp_capacity, tyndp_demand, gen_types, gen_costs, emission_factor, inertia_constants, start_up_cost, node_positions = _EUGO.get_grid_data(tyndp_version, scenario, Year, climate_year) # import zonal input (mainly used for cost data)
+    zonal_result, zonal_input, scenario_data = _EUGO.load_results(tyndp_version, scenario, year, climate_year,"zonal") # Import zonal results
+    ntcs, zones, arcs, tyndp_capacity, tyndp_demand, gen_types, gen_costs, emission_factor, inertia_constants, start_up_cost, node_positions = _EUGO.get_grid_data(tyndp_version, scenario,year, climate_year) # import zonal input (mainly used for cost data)
     pv, wind_onshore, wind_offshore = _EUGO.load_res_data()
 end
 
@@ -61,7 +62,7 @@ print("----------------------","\n")
 zone_mapping = _EUGO.map_zones()
 
 # Scale generation capacity based on TYNDP data
-scenario_id = "$scenario$Year"
+scenario_id = "$scenario$year"
 _EUGO.scale_generation!(tyndp_capacity, EU_grid, scenario_id, climate_year, zone_mapping)
 
 # Isolate zone: input is vector of strings, if you need to relax the fixing border flow assumptions use:
@@ -71,7 +72,9 @@ zone_grid = _EUGO.isolate_zones(EU_grid, isolated_zones, border_slack = 0.01) #y
 for (g_id,g) in zone_grid["gen"]
   if g["type"] != "XB_dummy"
    g["cost"][1] = gen_costs[g["type_tyndp"]]
-   end
+  else
+    g["cost"][1] = 0
+  end   
 end
 # create RES time series based on the TYNDP model for 
 # (1) all zones, e.g.  create_res_time_series(wind_onshore, wind_offshore, pv, zone_mapping) 
@@ -91,13 +94,13 @@ s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => true, "fi
 s_dual = Dict("output" => Dict("branch_flows" => true,"duals" => true), "conv_losses_mp" => true,"fix_cross_border_flows" => true)
 
 # This function will  create a dictionary with all hours as result. For all 8760 hours, this might be memory intensive
-#result = _EUGO.batch_opf(hour_start_idx, hour_end_idx, zone_grid, timeseries_data, gurobi, s_dual)
+result = _EUGO.batch_opf(hour_start_idx, hour_end_idx, zone_grid, timeseries_data, gurobi, s_dual)
 
 # An alternative is to run it in chuncks of "batch_size", which will store the results as json files, e.g. hour_1_to_batch_size, ....
 batch_size = 24
 _EUGO.batch_opf(hour_start_idx, hour_end_idx, zone_grid, timeseries_data, gurobi, s_dual, batch_size, output_file_name)
 
-result_file_name = joinpath(_EUGO.BASE_DIR, "results", "TYNDP"*tyndp_version, join(["result_nodal_tyndp_", scenario*Year,"_", climate_year, ".json"]))
+result_file_name = joinpath(_EUGO.BASE_DIR, "results","OPF_NorthSEA", "TYNDP"*tyndp_version, join(["result_nodal_tyndp_", scenario*year,"_", climate_year, ".json"]))
 number_of_hours = hour_end_idx - hour_start_idx + 1
 iterations = Int(number_of_hours/ batch_size)
 input_files = []
@@ -108,29 +111,44 @@ for idx in 1 : iterations
     push!(input_files,opf_file_name)
 end
 
-Total_result = concatenate_json_files(input_files,result_file_name)
+function concatenate_json_files(input_files)
+  total_result = Dict()  # Maak een lege dictionary om alle JSON-data in op te slaan
+
+  for file in input_files
+      data = JSON.parsefile(file)  # Lees JSON-bestand en parse het naar een Dict
+      #result = JSON.parse(data)  # Parse de inhoud van het JSON-bestand naar een Dict
+      merge!(total_result, data)   # Voeg de inhoud samen in de hoofd-Dict
+      println("Added ", file, " to total result")
+  end
+
+  return total_result
+end
 
 
+Total_result = concatenate_json_files(input_files)
+
+d = JSON.parsefile(result_file_name)
+result = JSON.parse(d)
 
 
 ## Write out JSON files
 # Result file, with hourly results
 
-json_string = JSON.json(Total_result)
-result_file_name = joinpath(_EUGO.BASE_DIR, "results", "TYNDP"*tyndp_version, join(["result_nodal_tyndp_", scenario*Year,"_", climate_year, ".json"]))
+json_string = JSON.json(result)
+result_file_name = joinpath(_EUGO.BASE_DIR, "results", "TYNDP"*tyndp_version, join(["result_nodal_tyndp_", scenario*year,"_", climate_year, ".json"]))
 open(result_file_name,"w") do f
   JSON.print(f, json_string)
 end
 
 # Input data dictionary as .json file
-input_file_name = joinpath(_EUGO.BASE_DIR, "results", "TYNDP"*tyndp_version,  join(["input_nodal_tyndp_", scenario*Year,"_", climate_year, ".json"]))
+input_file_name = joinpath(_EUGO.BASE_DIR, "results", "TYNDP"*tyndp_version,  join(["input_nodal_tyndp_", scenario*year,"_", climate_year, ".json"]))
 json_string = JSON.json(zone_grid)
 open(input_file_name,"w") do f
   JSON.print(f, json_string)
 end
 
 # scenario file (e.g. zonal time series and installed capacities) as .json file
-scenario_file_name = joinpath(_EUGO.BASE_DIR, "results", "TYNDP"*tyndp_version, join(["scenario_nodal_tyndp_", scenario*Year,"_", climate_year, ".json"]))
+scenario_file_name = joinpath(_EUGO.BASE_DIR, "results", "TYNDP"*tyndp_version, join(["scenario_nodal_tyndp_", scenario*year,"_", climate_year, ".json"]))
 json_string = JSON.json(timeseries_data)
 open(scenario_file_name,"w") do f
   JSON.print(f, json_string)

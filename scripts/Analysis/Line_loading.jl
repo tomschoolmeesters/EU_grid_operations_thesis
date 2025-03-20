@@ -38,14 +38,18 @@ function Line_loading(lines)
     end
 end
 
-function Loadfactor(hour_range)
+function mean_Loadfactor(nodal_input,hour_range)
     Loading = Dict()  # Initialize Power as a dictionary of arrays
     for line_ac in keys(nodal_input["branch"])
         if nodal_input["branch"]["$line_ac"]["type"] == "AC line"
             load_factors = Float64[]
             max_rating = nodal_input["branch"]["$line_ac"]["rate_a"]*100 #MW
+            max_elec_rating = (nodal_input["branch"]["$l_ac"]["angmax"]/nodal_input["branch"]["$l_ac"]["br_x"]) *100 #MW
+            
             for i in hour_range
-                push!(load_factors, (abs(nodal_result["$i"]["solution"]["branch"][line_ac]["pt"]) * 100)/max_rating)
+                load_factor_therm_i = (abs(nodal_result["$i"]["solution"]["branch"][line_ac]["pt"]) * 100)/max_rating
+                load_factor_elec_i = abs(nodal_result["$i"]["solution"]["branch"]["$l_ac"]["pt"]*100)/max_elec_rating
+                push!(load_factors, minimum([load_factor_therm_i, load_factor_elec_i]))
             end
             Loading[parse(Int,line_ac)] = mean(load_factors)
         end
@@ -69,6 +73,35 @@ function Loadfactor(hour_range)
     end
 
     return Loading
+end
+
+
+function hourly_Loadfactor(nodal_input,hour_range)
+    Loading_AC = Dict()  # Initialize Power as a dictionary of arrays
+    Loading_DC = Dict()  # Initialize Power as a dictionary of arrays
+    for line_ac in keys(nodal_result["1"]["solution"]["branch"])
+        load_factors = Float64[]
+        max_rating = nodal_input["branch"]["$line_ac"]["rate_a"]*100 #MW
+        max_elec_rating = (nodal_input["branch"]["$line_ac"]["angmax"]/nodal_input["branch"]["$line_ac"]["br_x"]) *100 #MW
+        
+        for i in hour_range
+            load_factor_therm_i = (abs(nodal_result["$i"]["solution"]["branch"]["$line_ac"]["pt"])*100)/max_rating
+            load_factor_elec_i = (abs(nodal_result["$i"]["solution"]["branch"]["$line_ac"]["pt"]*100))/max_elec_rating
+            push!(load_factors, maximum([load_factor_therm_i, load_factor_elec_i]))
+        end
+        Loading_AC[parse(Int,line_ac)] = load_factors
+    end
+    
+    for line_dc in keys(nodal_input["branchdc"])
+        load_factors = Float64[]
+        max_rating = nodal_input["branchdc"]["$line_dc"]["rateA"]*100 #MW
+        for i in hour_range
+            push!(load_factors, (abs(nodal_result["$i"]["solution"]["branchdc"][line_dc]["pt"]) * 100)/max_rating)
+        end
+        Loading_DC[parse(Int,line_dc)] = load_factors
+    end
+
+    return Loading_AC, Loading_DC
 end
 
 function where_congestion()
@@ -148,7 +181,7 @@ function plot_loaded_grid(
     maximum_flows = false, 
     plot_node_numbers_ac = false, 
     plot_node_numbers_dc = false, 
-    line_loadings = Loadfactor([1559]))
+    line_loadings = mean_Loadfactor(nodal_input,[1559]))
 
     #using PlotlyJS, ColorSchemes, DataFrames
 
