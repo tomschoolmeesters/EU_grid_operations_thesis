@@ -29,7 +29,7 @@ function generate_timeseries()
 
     df = CSV.read("./data_sources/timeseries_demand.csv",DataFrame)
     timeseries_demand = df[:,:1]
-    timeseries_data["demand"] = timeseries_demand*1.5
+    timeseries_data["demand"] = timeseries_demand
 
     return timeseries_data
 end
@@ -58,6 +58,23 @@ for (l, load) in Test_Case["load"]
     load["flex"] = 1
 end
 
+
+for (b,bus) in Test_Case["bus"]
+    if b != "6"
+        gen_keys = collect(keys(Test_Case["gen"]))
+        gen_keys =  map(x -> parse(Int, x), gen_keys)
+        new_key = maximum(gen_keys) + 1
+        shedding_gen = deepcopy(Test_Case["gen"]["1"])
+        shedding_gen["cost"][1] = 10e8
+        shedding_gen["type_tyndp"] = "shedding"
+        shedding_gen["gen_bus"] = parse(Int,b)
+        shedding_gen["source_id"][2] = new_key
+        Test_Case["gen"]["$new_key"] = shedding_gen
+    end
+end
+
+    
+
 timeseries_data = generate_timeseries()
 
 gurobi = Gurobi.Optimizer
@@ -67,7 +84,7 @@ start_hour = 1
 number_of_hours = 144
 
 input_data = deepcopy(Test_Case)
-s = Dict("output" => Dict("branch_flows" => true,"duals" => true), "conv_losses_mp" => true)
+s_dual = Dict("output" => Dict("branch_flows" => true,"duals" => true), "conv_losses_mp" => true)
 nodal_result = Dict{String, Any}("$hour" => nothing for hour in 1:number_of_hours)
 for hour = start_hour:(start_hour+number_of_hours-1)
     print("Hour ", hour, " of ", start_hour+number_of_hours-1, "\n")
@@ -75,7 +92,7 @@ for hour = start_hour:(start_hour+number_of_hours-1)
     Input_data = deepcopy(Test_Case)
     _EUGO.hourly_grid_data_test!(Input_data, Test_Case, hour, timeseries_data)
     # Solve Network Flow OPF using PowerModels
-    nodal_result["$hour"] = _PMACDC.run_acdcopf(Input_data, PowerModels.DCPPowerModel, gurobi; setting = s)
+    nodal_result["$hour"] = _PMACDC.run_acdcopf(Input_data, PowerModels.DCPPowerModel, gurobi; setting = s_dual)
 end
 
 nodal_input = deepcopy(input_data)
@@ -83,11 +100,11 @@ input_data = TEST_candidate_lines(input_data,number_of_hours)
 
 
 for (b,branch) in input_data["ne_branch"]
-    branch["construction_cost"] = 0
+    branch["construction_cost"] = 1
 end
 
 for (b,branch) in input_data["branchdc_ne"]
-    branch["cost"] = 0
+    branch["cost"] = 15
 end
 
 mn_data = _IM.replicate(input_data, number_of_hours, Set{String}(["source_type", "name", "source_version", "per_unit"]))

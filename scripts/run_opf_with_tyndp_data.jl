@@ -33,7 +33,7 @@ load_data = true
 use_case = "North_Sea_reloc"
 hour_start = 1
 hour_end = 144
-isolated_zones = ["DE"]#,"FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]#["BE","FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]
+isolated_zones = ["BE"]#,"FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]#["BE","FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]
 relocate_wind = true
 
 ############ LOAD EU grid data ############

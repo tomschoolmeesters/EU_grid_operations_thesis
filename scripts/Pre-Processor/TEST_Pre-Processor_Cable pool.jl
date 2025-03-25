@@ -171,16 +171,16 @@ function TEST_candidate_lines(zone_grid,number_of_hours)
         end
     end
 
-    for (bus1,bus2) in CL_newAC
-        exis_branch = deepcopy(nodal_input["branch"]["1"])
+    #for (bus1,bus2) in CL_newAC
+    #    exis_branch = deepcopy(nodal_input["branch"]["1"])
 
-        ne_branch["$Branch_idx"] = exis_branch
-        ne_branch["$Branch_idx"]["f_bus"] = Int(bus1)
-        ne_branch["$Branch_idx"]["t_bus"] = Int(bus2)
-        ne_branch["$Branch_idx"]["source_id"][2] = Int(Branch_idx)
-        ne_branch["$Branch_idx"]["index"] = Int(Branch_idx)
-        Branch_idx = Branch_idx + 1
-    end
+    #    ne_branch["$Branch_idx"] = exis_branch
+    #    ne_branch["$Branch_idx"]["f_bus"] = Int(bus1)
+    #    ne_branch["$Branch_idx"]["t_bus"] = Int(bus2)
+    #    ne_branch["$Branch_idx"]["source_id"][2] = Int(Branch_idx)
+    #    ne_branch["$Branch_idx"]["index"] = Int(Branch_idx)
+    #    Branch_idx = Branch_idx + 1
+    #end
 
     ne_branchDC = Dict{String,Any}()
     Branch_idx = 1000
@@ -202,7 +202,7 @@ function TEST_candidate_lines(zone_grid,number_of_hours)
     end
 
     for (bus1,bus2) in CL_newDC
-        exis_branch = deepcopy(nodal_input["branchdc"]["1"])
+        exis_branch = deepcopy(nodal_input["branchdc"]["501"])
 
         ne_branchDC["$Branch_idx"] = exis_branch
         ne_branchDC["$Branch_idx"]["fbusdc"] = Int(bus1)

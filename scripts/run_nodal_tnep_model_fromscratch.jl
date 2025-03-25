@@ -46,16 +46,16 @@ include("Pre-Processor/Pre-Processor_Cable pool.jl")
 # A sample set for TYNDP 2020
  tyndp_version = "2020"
  fetch_data = true
- number_of_hours = 144
+ number_of_hours = 10
  scenario = "DE"
  year = "2040"
  climate_year = "1984"
- hours = 1:1
+ hours = 1:10
  load_data = true
  use_case = "North_Sea_reloc"
  hour_start = 1
- hour_end = 1
- isolated_zones = ["DE"]#,"FR","UK","DE","NL","DK2","DK1"]#["BE","FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]
+ hour_end = 10
+ isolated_zones = ["BE"]#,"FR","UK","DE","NL","DK2","DK1"]#["BE","FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]
 relocate_wind = true
 
 ############ LOAD EU grid data ############
@@ -165,8 +165,8 @@ print("####### STARTING OPTIMISATION ########", "\n")
 
 gurobi = JuMP.optimizer_with_attributes(
     Gurobi.Optimizer,
-    "TimeLimit" => 240,        # Maximaal 300 seconden 8 hours
-    "MIPGap" => 0.01)         # Stop als de gap kleiner is dan 12% 0.01
+    "TimeLimit" => 600,        # Maximaal 300 seconden 8 hours
+    "MIPGap" => 0.01)         # Stop als de gap kleiner is dan 0.01
 
 
 s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => true, "fix_cross_border_flows" => true, "process_data_internally" => false)#, "borders"=>[1,2,3,4,5,6,7,8,9,10,11,12])

@@ -64,7 +64,7 @@ function update_connectionzone(OFF_dc_buses)
     return updated_OFF_dc_buses
 end
 
-function get_susceptance_matrix(nodal_input)
+function get_AC_branch_info(nodal_input)
     AC_branches = Dict()
     AC_buses = Vector()
     nr = 1
@@ -99,6 +99,12 @@ function get_susceptance_matrix(nodal_input)
     end
     AC_buses = unique(AC_buses)
     AC_buses = sort(AC_buses)
+    return AC_branches, AC_buses
+end
+
+function get_susceptance_matrix(nodal_input)
+    AC_branches, AC_buses = get_AC_branch_info(nodal_input)    
+
     AC_buses_amount = length(AC_buses)
     bus_index = Dict(bus => idx for (idx, bus) in enumerate(AC_buses))
     susceptance_matrix = spzeros(AC_buses_amount,AC_buses_amount)
@@ -126,16 +132,16 @@ end
 function get_reduced_susceptance_matrix(nodal_input)
     susceptance_matrix, bus_index, AC_branches = get_susceptance_matrix(nodal_input)
     reduced_susceptance_matrix = deepcopy(susceptance_matrix)
-    slack_bus = [i for (i,bus) in nodal_input["bus"] if bus["bus_type"] == 3]
-    for bus in slack_bus
-        bus = parse(Int,bus)
-        if bus in keys(bus_index)
-            println("Slack $bus")
-            slack_i = bus_index[bus]
-            reduced_susceptance_matrix = reduced_susceptance_matrix[1:end .!= slack_i, 1:end .!= slack_i]
-            bus_index = Dict(k => (v > slack_i ? v - 1 : v) for (k, v) in bus_index if k != bus)
-        end
-    end
+    #slack_bus = [i for (i,bus) in nodal_input["bus"] if bus["bus_type"] == 3]
+    #for bus in slack_bus
+    #    bus = parse(Int,bus)
+    #    if bus in keys(bus_index)
+    #        println("Slack $bus")
+    #        slack_i = bus_index[bus]
+    #        reduced_susceptance_matrix = reduced_susceptance_matrix[1:end .!= slack_i, 1:end .!= slack_i]
+    #        bus_index = Dict(k => (v > slack_i ? v - 1 : v) for (k, v) in bus_index if k != bus)
+    #    end
+    #end
     
     return reduced_susceptance_matrix, bus_index,AC_branches
 end
@@ -148,7 +154,6 @@ function get_inverse_susceptance_matrix(nodal_input)
     inverse_susceptance_matrix = inv(Matrix(U))*inv(Matrix(L))
     return inverse_susceptance_matrix, bus_index, AC_branches
 end
-
 
 
 function get_PTDF_matrix(nodal_input)
@@ -168,8 +173,6 @@ function get_PTDF_matrix(nodal_input)
         t_bus = line["t_bus"]
         t_bus_i = bus_index[t_bus]
         
-        
-            
             A[nr,f_bus_i] = 1
             A[nr,t_bus_i] = -1
 
@@ -178,23 +181,50 @@ function get_PTDF_matrix(nodal_input)
         #end
     end
     PTDF_matix = inv(Matrix(X))*A*B_inv
-    
+    return PTDF_matix, AC_branches, bus_index
 end
 
-function get_congestion_matrix(nodal_input,nodal_result)
+function get_dual_branch(AC_branches, nodal_result,number_of_hours)
+     
+    Lambda_matrix = zeros(length(AC_branches),number_of_hours)
+    for (line_idx, line) in AC_branches
+        nr = line["nr"]
+        f_bus = line["f_bus"]
+        t_bus = line["t_bus"]
+        lambda_f = []
+        lambda_t = []
+        for i in 1:number_of_hours
+            push!(lambda_f,nodal_result["$i"]["solution"]["bus"]["$f_bus"]["lam_kcl_r"])
+            push!(lambda_t,nodal_result["$i"]["solution"]["bus"]["$t_bus"]["lam_kcl_r"])
+        end
+        lambda_branch = abs.(lambda_f .- lambda_t)
+        Lambda_matrix[nr,:] = lambda_branch 
+    end
+    return Lambda_matrix
+end
+
+function get_congestion_matrix(nodal_input,nodal_result,AC_branches)
     Loading_AC, = hourly_Loadfactor(nodal_input,1:number_of_hours)
     Loading_AC = sort(Loading_AC)
     number_of_branches = length(Loading_AC)
     Congestion_matrix = zeros(number_of_branches,144)
-    row = 1
-    for (b_id,branch) in Loading_AC
-        Congestion_matrix[row,:] = branch
-        row += 1
+    for b_id in keys(Loading_AC)
+        f_bus = nodal_input["branch"]["$b_id"]["f_bus"]
+        t_bus = nodal_input["branch"]["$b_id"]["t_bus"]
+        idx = AC_branches[(f_bus,t_bus)]["nr"]
+        Congestion_matrix[idx,:] = Loading_AC[b_id]
     end
     return Congestion_matrix
-
-
 end
+
+function get_distance_matrix(nodal_input,nodal_result,AC_branches)
+    Congestion_matrix= get_congestion_matrix(nodal_input,nodal_result,AC_branches)
+    Corr = cor(Congestion_matrix')
+    Corr[isnan.(Corr)] .= 0
+    Dist = 1 .- Corr
+    return Dist
+end
+
 # Bereken de WCSS voor verschillende aantal clusters
 function compute_wcss(hc, D, max_k)
     wcss = Float64[]
@@ -213,31 +243,8 @@ function compute_wcss(hc, D, max_k)
     return wcss
 end
 
-# Voer de berekeningen uit
-max_clusters = 207
-wcss = compute_wcss(hc, Dist, max_clusters)
-
-# Plot de elbow curve
-Plots.plot(1:max_clusters, wcss, marker=:o, xlabel="Aantal clusters", ylabel="WCSS", title="Elbow Method")
-cable_indices = collect(keys(Loading_AC))  # Alle kabelindexen
-optimal_k = 120  # Verander dit naar het gevonden aantal clusters
-
-# Haal cluster labels op
-labels = cutree(hc, k=optimal_k)
-
-# Print welke transmissielijn in welk cluster zit
-Cluster_dict = Dict()
-for i in 1:optimal_k
-    println("Cluster $i: ", findall(labels .== i))
-    Cluster_dict[i] = findall(labels .== i)
-    
-end
-Cluster_dict = sort(Cluster_dict)
-for (cluster,cables) in Cluster_dict
-    corr_labels = [cable_indices[i] for i in cables]
-    Cluster_dict[cluster] = corr_labels
-end
-
+##################################
+##################################
 
 function candidate_lines(nodal_input,nodal_result,OFF_dc_buses,number_of_hours)
 
