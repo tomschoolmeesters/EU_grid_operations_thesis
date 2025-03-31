@@ -32,8 +32,8 @@ climate_year = "1984"
 load_data = true
 use_case = "North_Sea_reloc"
 hour_start = 1
-hour_end = 144
-isolated_zones = ["BE"]#,"FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]#["BE","FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]
+hour_end = 20
+isolated_zones = ["BE","NL"]#,"FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]#["BE","FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]
 relocate_wind = true
 
 ############ LOAD EU grid data ############
@@ -67,7 +67,7 @@ _EUGO.scale_generation!(tyndp_capacity, EU_grid, scenario_id, climate_year, zone
 
 # Isolate zone: input is vector of strings, if you need to relax the fixing border flow assumptions use:
 # _EUGO.isolate_zones(EU_grid, ["DE"]; border_slack = x), this will leas to (1-slack)*xb_flow_ref < xb_flow < (1+slack)*xb_flow_ref
-zone_grid = _EUGO.isolate_zones(EU_grid, isolated_zones, border_slack = 0.01) #you allow a 1% slack compared to the power flows computed through the zonal model, which might leave a bit more freedom to the optimizer compared to a strict equality constraint on the flow
+zone_grid = _EUGO.isolate_zones(EU_grid, isolated_zones, border_slack = 0.03) #you allow a 1% slack compared to the power flows computed through the zonal model, which might leave a bit more freedom to the optimizer compared to a strict equality constraint on the flow
 
 for (g_id,g) in zone_grid["gen"]
   if g["type"] != "XB_dummy"
@@ -85,7 +85,7 @@ push!(timeseries_data, "xb_flows" => _EUGO.get_xb_flows(zone_grid, zonal_result,
 
 # Start runnning hourly OPF calculations
 hour_start_idx = 1 
-hour_end_idx = 144
+hour_end_idx = 20
 
 plot_filename = joinpath("results", join(["grid_input_",use_case,".pdf"]))
 _EUGO.plot_grid(zone_grid, plot_filename)
@@ -103,29 +103,17 @@ _EUGO.batch_opf(hour_start_idx, hour_end_idx, zone_grid, timeseries_data, gurobi
 result_file_name = joinpath(_EUGO.BASE_DIR, "results","OPF_NorthSEA", "TYNDP"*tyndp_version, join(["result_nodal_tyndp_", scenario*year,"_", climate_year, ".json"]))
 number_of_hours = hour_end_idx - hour_start_idx + 1
 iterations = Int(number_of_hours/ batch_size)
-input_files = []
+total_result = Dict{String,Any}()
 for idx in 1 : iterations
-    hs_idx = Int((hour_start_idx - 1) + (idx - 1) * batch_size + 1) 
-    he_idx = Int((hour_start_idx - 1) + idx * batch_size)
-    opf_file_name = join([output_file_name, "_opf_",hs_idx,"_to_",he_idx,".json"])
-    push!(input_files,opf_file_name)
-end
-
-function concatenate_json_files(input_files)
-  total_result = Dict()  # Maak een lege dictionary om alle JSON-data in op te slaan
-
-  for file in input_files
-      data = JSON.parsefile(file)  # Lees JSON-bestand en parse het naar een Dict
-      #result = JSON.parse(data)  # Parse de inhoud van het JSON-bestand naar een Dict
-      merge!(total_result, data)   # Voeg de inhoud samen in de hoofd-Dict
-      println("Added ", file, " to total result")
+  hs_idx = Int((hour_start_idx - 1) + (idx - 1) * batch_size + 1) 
+  he_idx = Int((hour_start_idx - 1) + idx * batch_size)
+  opf_file_name = join([output_file_name, "_opf_",hs_idx,"_to_",he_idx,".json"])
+  data = JSON.parsefile(opf_file_name)
+  for i in 1:batch_size
+    j = (hs_idx-1)+i
+    total_result["$j"] = deepcopy(data["$j"])
   end
-
-  return total_result
 end
-
-
-Total_result = concatenate_json_files(input_files)
 
 d = JSON.parsefile(result_file_name)
 result = JSON.parse(d)

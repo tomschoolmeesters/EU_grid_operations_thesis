@@ -84,8 +84,105 @@ function PTDF_analysis(nodal_input,nodal_result,number_of_hours)
     end
 
     Lambda_matrix = get_dual_branch(AC_branches, nodal_result,number_of_hours)
-    Impact_matrix = Powerflow_matrix .* reshape(Lambda_matrix, 200, 1, 144)
+    Impact_matrix = Powerflow_matrix .* reshape(Lambda_matrix, 546, 1, 144)
 
     return Impact_matrix   
 end
 
+function PTDF_analysis_full(nodal_input,nodal_result,number_of_hours,ne_branch,ne_branchDC)
+    PTDF_matrix, AC_branches, bus_index = get_PTDF_matrix(nodal_input)
+    # Transform info from PTDF to a powerflow impact matrix: what is the impact of reinforcement ij on branch kl
+    amount_cand = length(ne_branch)+length(ne_branchDC)
+    Powerflow_matrix = zeros(size(PTDF_matrix,1),amount_cand)
+    for i in 1:size(PTDF_matrix, 1) # i = elke bestaande AC_branch 
+        #AC_candidates first
+        for (idx,branch) in ne_branch 
+            idx = parse(Int,idx)
+            j = idx - 20000 + 1
+            f_bus = get(branch,"f_bus",nothing)
+            t_bus = get(branch,"t_bus",nothing)
+            branch_idx = branch["index"]
+        
+            f_bus_idx = get(bus_index, f_bus, nothing)
+            t_bus_idx = get(bus_index, t_bus, nothing)
+            candidate_rating = branch["rate_a"]
+
+            if isnothing(f_bus_idx) || isnothing(t_bus_idx)
+                error("Busindex ontbreekt voor f_bus=$f_bus of t_bus=$t_bus")
+            end
+        
+            Powerflow_matrix[i, j] = abs(PTDF_matrix[i, t_bus_idx] - PTDF_matrix[i, f_bus_idx])*candidate_rating
+        end
+        #DC_candidates second
+        for (idx,branchDC) in ne_branchDC 
+            idx = parse(Int,idx)
+            j = idx - 30000 + 1 + length(ne_branch)
+            f_busDC = branchDC["fbusdc"]
+            t_busDC = branchDC["tbusdc"]
+
+            f_busAC = 0
+            t_busAC = 0
+
+            for (c,conv) in nodal_input["convdc"]
+                if conv["busdc_i"] == f_busDC
+                    f_busAC = conv["busac_i"]
+                end
+                if conv["busdc_i"] == t_busDC
+                    t_busAC = conv["busac_i"]
+                end
+            end
+            branch_idx = branchDC["index"]
+        
+            f_bus_idx = get(bus_index, f_busAC, nothing)
+            t_bus_idx = get(bus_index, t_busAC, nothing)
+            candidate_rating = branchDC["rateA"]
+
+            if isnothing(f_bus_idx) || isnothing(t_bus_idx)
+                error("Busindex ontbreekt voor f_bus=$f_bus of t_bus=$t_bus")
+            end
+        
+            Powerflow_matrix[i, j] = abs(PTDF_matrix[i, t_bus_idx] - PTDF_matrix[i, f_bus_idx])*candidate_rating
+        end
+    end
+    
+    Lambda_matrix = get_dual_branch(AC_branches, nodal_result,number_of_hours)
+    #Lambda_matrix = get_dual_branch_full(ne_branch,ne_branchDC, nodal_result,number_of_hours)
+    Impact_matrix = Powerflow_matrix .* reshape(Lambda_matrix, size(PTDF_matrix,1), 1, number_of_hours)
+
+    return Impact_matrix   
+end
+
+
+
+
+function pre_processor()
+
+    #1: Create all possible candidates (AC & DC)
+    ne_branch, ne_branchDC = candidate_lines(nodal_input,OFF_dc_buses)
+
+    #2: Create the PowerFlow matrix & Impact matrix for all candidate_lines
+    Impact_matrix = PTDF_analysis_full(nodal_input,nodal_result,number_of_hours,ne_branch,ne_branchDC)
+
+    #3: Filter candidates based on their impact
+    amount_cand = length(ne_branch)+length(ne_branchDC)
+    Impact = Vector()
+    for i in 1:amount_cand
+        push!(Impact,sum(Impact_matrix[:,i,:]))
+    end
+    filename = "ImpactBE_NL.xlsx"
+
+    # Open een nieuw Excel-bestand en schrijf de vector naar de eerste kolom
+    XLSX.openxlsx(filename, mode="w") do xf
+        sheet = xf[1]  # Gebruik het eerste werkblad
+        sheet["A1"] = "Impact"  # Zet een kolomtitel
+        for i in 1:length(Impact)
+            sheet["A$(i+1)"] = Impact[i]  # Schrijf elk element onder elkaar
+        end
+    end
+
+
+    #4: Update zone_grid for TNEP problem
+
+
+    
+end

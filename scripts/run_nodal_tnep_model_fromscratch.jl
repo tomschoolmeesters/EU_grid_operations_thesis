@@ -136,7 +136,7 @@ for (b,branch) in zone_grid["ne_branch"]
 end
 
 for (b,branch) in zone_grid["branchdc_ne"]
-    branch["cost"] = 15
+    branch["cost"] = 1
 end
 
 # create RES time series based on the TYNDP model for 
@@ -165,8 +165,7 @@ print("####### STARTING OPTIMISATION ########", "\n")
 
 gurobi = JuMP.optimizer_with_attributes(
     Gurobi.Optimizer,
-    "TimeLimit" => 600,        # Maximaal 300 seconden 8 hours
-    "MIPGap" => 0.01)         # Stop als de gap kleiner is dan 0.01
+    "MIPGap" => 0.05)         # Stop als de gap kleiner is dan 0.01
 
 
 s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => true, "fix_cross_border_flows" => true, "process_data_internally" => false)#, "borders"=>[1,2,3,4,5,6,7,8,9,10,11,12])
