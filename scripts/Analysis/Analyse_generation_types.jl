@@ -1,4 +1,4 @@
-function Analyse_generation_types(hour_range)
+function Analyse_generation_types(hour_range,start_hour)
     # Maak een lijst van unieke generator types
     types = []
     for (g_id, g) in nodal_input["gen"]
@@ -31,7 +31,7 @@ function Analyse_generation_types(hour_range)
     # Pie-diagram
     labels = collect(keys(total_generation))       # Extract labels
     waarden = collect(values(total_generation))    # Extract values
-    positive_indices = waarden .> 0                # Filter out non-positive values
+    positive_indices = waarden .>= 0                # Filter out non-positive values
     #println("Positive indices: ", positive_indices)
     # Filter data for the pie chart (ignoring negative values)
     filtered_labels = labels[positive_indices]
@@ -53,7 +53,7 @@ function Analyse_generation_types(hour_range)
     end
 
     # Print de totale som van alle waarden
-    println("\nTotal Generation (GWh) over all types: $total_sum")
+    println("\nTotal Generation (TWh) over all types: $total_sum")
 
 
     # Loop over alle unieke types en bereken de totale generatie per type per uur
@@ -63,8 +63,8 @@ function Analyse_generation_types(hour_range)
             generation_per_type = Vector{Float64}()
             for hour in hour_range
                 hourly_generation = 0
-                for (g_idx,gen) in nodal_input["gen"]
-                    if gen["type"] == type
+                for (g_idx,gen) in nodal_result["2000"]["solution"]["gen"]
+                    if nodal_input["gen"]["$g_idx"]["type"] == type
                         hourly_generation += nodal_result["$hour"]["solution"]["gen"][g_idx]["pg"]*100
                     end
                 end
@@ -88,6 +88,7 @@ function Analyse_generation_types(hour_range)
 
     total_generation = Vector{Float64}()
     for hour in hour_range
+        hour = hour-start_hour+1
         hourly_generation = 0
         for (type,data) in Generation_per_hour
             hourly_generation += data[hour]
@@ -109,7 +110,7 @@ function Analyse_generation_types(hour_range)
 
     # Beschikbare generatie types
     available_types = ["Solar PV", "Offshore", "Onshore", "Hard Coal", "Oil", "Hydro Run-of-River",
-    "Gas", "XB_dummy", "Biomass", "Nuclear", "Lignite", "Storage"]
+    "Gas", "XB_dummy", "Biomass", "Nuclear", "Lignite", "Storage", "VOLL"]
 
     # Vraag de gebruiker welke types te plotten
     println("Beschikbare generatie types: ", join(available_types, ", "))
@@ -136,7 +137,8 @@ function Analyse_generation_types(hour_range)
     end
 
     Plots.plot!(time, Load_per_hour ./ 1000, label="Load", linewidth=2, linestyle=:dash)
-
+    Total_load = sum(Load_per_hour)
+    println(Total_load)
     # Labels en titel toevoegen
     xlabel!("Time")
     ylabel!("Power (GW)")

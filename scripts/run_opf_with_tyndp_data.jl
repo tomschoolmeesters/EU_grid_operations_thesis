@@ -32,20 +32,36 @@ climate_year = "1984"
 load_data = true
 use_case = "North_Sea_reloc"
 hour_start = 1
-hour_end = 20
-isolated_zones = ["BE","NL"]#,"FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]#["BE","FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]
+hour_end = 200
+isolated_zones = ["BE","NL"]#,"UK","DE","NL"]#["BE","FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]
 relocate_wind = true
+update_conv = true
+add_VOLL = true
 
 ############ LOAD EU grid data ############
 file = "./data_sources/European_grid_no_nseh.json"
 output_file_name = joinpath("results", join([use_case,"_",scenario,"_", climate_year]))
 gurobi = Gurobi.Optimizer
 EU_grid = _PM.parse_file(file)
+EU_grid["bus"]["6120"]["zone"] = "XB_node"
+EU_grid["bus"]["6121"]["zone"] = "XB_node"
+EU_grid["bus"]["6122"]["zone"] = "XB_node"
+EU_grid["bus"]["6123"]["zone"] = "XB_node"
+EU_grid["bus"]["6124"]["zone"] = "XB_node"
 if relocate_wind
   new_DC_buses, relocation_dict, new_branches = update_input_data(EU_grid)
 end
+if add_VOLL
+  EU_grid = add_VOLL_generation(EU_grid)
+end
+
 _PMACDC.process_additional_data!(EU_grid)
 _EUGO.add_load_and_pst_properties!(EU_grid)
+
+if update_conv
+  EU_grid = update_conv_input(EU_grid)
+end
+
 
 #### LOAD TYNDP SCENARIO DATA ##########
 if load_data == true
@@ -69,9 +85,24 @@ _EUGO.scale_generation!(tyndp_capacity, EU_grid, scenario_id, climate_year, zone
 # _EUGO.isolate_zones(EU_grid, ["DE"]; border_slack = x), this will leas to (1-slack)*xb_flow_ref < xb_flow < (1+slack)*xb_flow_ref
 zone_grid = _EUGO.isolate_zones(EU_grid, isolated_zones, border_slack = 0.03) #you allow a 1% slack compared to the power flows computed through the zonal model, which might leave a bit more freedom to the optimizer compared to a strict equality constraint on the flow
 
+for (g,gen) in zone_grid["gen"]
+  if parse(Int,g) >= 100000 && gen["type_tyndp"] == "XB_dummy"
+    delete!(zone_grid["gen"], g)
+  end
+end
+
+
+for (l, load) in zone_grid["load"]
+  load["pred_rel_max"] = 0
+  load["cost_red"] = 10e5 * zone_grid["baseMVA"]
+  load["cost_curt"] = 10e5 * zone_grid["baseMVA"]
+  load["flex"] = 1
+end
+
 for (g_id,g) in zone_grid["gen"]
+  
   if g["type"] != "XB_dummy"
-   g["cost"][1] = gen_costs[g["type_tyndp"]]
+      g["cost"][1] = gen_costs[g["type_tyndp"]]
   else
     g["cost"][1] = 0
   end   
@@ -84,8 +115,8 @@ timeseries_data = _EUGO.create_res_and_demand_time_series(wind_onshore, wind_off
 push!(timeseries_data, "xb_flows" => _EUGO.get_xb_flows(zone_grid, zonal_result, zonal_input, zone_mapping)) 
 
 # Start runnning hourly OPF calculations
-hour_start_idx = 1 
-hour_end_idx = 20
+hour_start_idx = 2000
+hour_end_idx = 2144
 
 plot_filename = joinpath("results", join(["grid_input_",use_case,".pdf"]))
 _EUGO.plot_grid(zone_grid, plot_filename)

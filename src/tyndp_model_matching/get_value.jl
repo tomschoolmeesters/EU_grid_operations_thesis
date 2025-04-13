@@ -28,10 +28,29 @@ function get_generation_capacity(capacity, scenario, type, climate_year, node)
         scenario = "DE2040 Update"
     end
     nodal_gen = capacity[capacity[!, "Node_Line"] .== node, :]
-    nodal_gen_type = nodal_gen[nodal_gen[!, "Generator_ID"] .== type, :]
-    values = nodal_gen_type[nodal_gen_type[!, "Simulation_ID"] .== scenario, :]
-    value = values[values[!, "ClimateYear"] .== parse(Int, climate_year), "Value"]
-    return value
+    final_value = 0
+    
+    if type == "Gas CCGT new"
+        types = ["Gas CCGT new", "Gas CCGT present 2","Gas CCGT old 2","Gas conventional old 2", "Gas CCGT old 1","Gas CCGT old 2","Gas CCGT present 1", "Gas conventional old 1", "Gas CCGT new CCS", "Gas OCGT new", "Gas OCGT old", "Other non-RES","PS Closed"]
+        for i in types
+            if i in nodal_gen[!, "Generator_ID"]
+                nodal_gen_type = nodal_gen[nodal_gen[!, "Generator_ID"] .== i, :]
+                if scenario in nodal_gen_type[!, "Simulation_ID"]
+                    values = nodal_gen_type[nodal_gen_type[!, "Simulation_ID"] .== scenario, :]
+                    value = values[values[!, "ClimateYear"] .== parse(Int, climate_year), "Value"]
+                    final_value += value[1]
+                end
+            end
+        end
+    else
+        nodal_gen_type = nodal_gen[nodal_gen[!, "Generator_ID"] .== type, :]
+        values = nodal_gen_type[nodal_gen_type[!, "Simulation_ID"] .== scenario, :]
+        value = values[values[!, "ClimateYear"] .== parse(Int, climate_year), "Value"]
+        final_value = value
+        
+    end
+
+    return final_value
 end
 
 

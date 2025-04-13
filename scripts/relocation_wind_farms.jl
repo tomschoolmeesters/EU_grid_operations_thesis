@@ -232,6 +232,9 @@ function update_input_data(input_data)
             input_data["branch"]["$ACbranch_number"]["source_id"][2] = ACbranch_number
             input_data["branch"]["$ACbranch_number"]["f_bus"] = new_gen_bus
             input_data["branch"]["$ACbranch_number"]["t_bus"] = DC_to_ACbus
+            input_data["branch"]["$ACbranch_number"]["rate_a"] = 49
+            input_data["branch"]["$ACbranch_number"]["rate_b"] = 49
+            input_data["branch"]["$ACbranch_number"]["rate_c"] = 49
             input_data["branch"]["$ACbranch_number"]["index"] = ACbranch_number
             input_data["branch"]["$ACbranch_number"]["interconnector"] = false
             input_data["branch"]["$ACbranch_number"]["transformer"] = false
@@ -319,4 +322,48 @@ function plot_OFFwind_capacities(input_data,zone,tyndp_version,scenario,climate_
     Plots.bar!(years,(capacities/1000),title="Offshore Wind Capacities for $zone" , xlabel="Year", ylabel="Capacity (GW)",legend=false,guidefont=12, xtickfont=12, ytickfont=12)
 
     display(P1)
+end
+
+function update_conv_input(nodal_input)
+    for (i,conv) in nodal_input["convdc"]
+        if conv["Pacrated"] <= 150
+            conv["Pacrated"] = 150
+            conv["Pacmax"] = 150
+            conv["Pacmin"] = -150
+        end
+        conv["transformer"] = 0
+        conv["reactor"] = 0
+        conv["filter"] = 0
+    end
+    return nodal_input
+end
+
+function add_VOLL_generation(EU_grid)
+    index = 100000
+    for (i,load) in EU_grid["load"]
+        load_bus = load["load_bus"]
+        zone = load["zone"]
+        country = load["country"]
+        EU_grid["gen"]["$index"] = Dict{String,Any}()
+        EU_grid["gen"]["$index"]["zone"] = zone
+        EU_grid["gen"]["$index"]["type_tyndp"] = "VOLL"
+        EU_grid["gen"]["$index"]["model"] = 2
+        EU_grid["gen"]["$index"]["gen_bus"] = load_bus
+        EU_grid["gen"]["$index"]["pmax"] = 200
+        EU_grid["gen"]["$index"]["country"] = country
+        EU_grid["gen"]["$index"]["vg"] = 1.0
+        EU_grid["gen"]["$index"]["source_id"] = ["gen", index]
+        EU_grid["gen"]["$index"]["index"] = index
+        EU_grid["gen"]["$index"]["cost"] = [60, 0]
+        EU_grid["gen"]["$index"]["qmax"] = 1.77
+        EU_grid["gen"]["$index"]["gen_status"] = 1
+        EU_grid["gen"]["$index"]["qmin"] = -1.77
+        EU_grid["gen"]["$index"]["type"] = "VOLL"
+        EU_grid["gen"]["$index"]["pmin"] = 0
+        EU_grid["gen"]["$index"]["ncost"] = 2
+    
+
+        index += 1
+    end
+    return EU_grid
 end

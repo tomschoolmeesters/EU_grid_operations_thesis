@@ -16,13 +16,18 @@ function Analyse_load(hour_range)
 end
 
 
-function load_shedding()
+function load_shedding(hour_range)
     
-    for i in range(1,number_of_hours)
+    for i in hour_range
         for (l,load_info) in nodal_result["$i"]["solution"]["load"]
     
             if load_info["pcurt"]>0
+                AC_bus = nodal_input["load"]["$l"]["load_bus"]
                 println("Pcurt: bus $l at time $i")
+            end
+            if load_info["pred"]>0
+                AC_bus = nodal_input["load"]["$l"]["load_bus"]
+                println("Pred: bus $AC_bus at time $i")
             end
         end
     end

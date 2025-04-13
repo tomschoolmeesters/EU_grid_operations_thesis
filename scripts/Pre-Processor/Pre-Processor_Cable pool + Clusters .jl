@@ -241,11 +241,15 @@ function get_PTDF_matrix(nodal_input)
             
         #end
     end
-    PTDF_matix = inv(Matrix(X))*A*B_inv
+    X = Matrix(X)
+    X = lu(X)
+    L = X.L
+    U = X.U
+    PTDF_matix = inv(Matrix(U))*inv(Matrix(L))*A*B_inv
     return PTDF_matix, AC_branches, bus_index
 end
 
-function get_dual_branch(AC_branches, nodal_result,number_of_hours)
+function get_dual_branch(AC_branches, nodal_result,number_of_hours,start_hour)
      
     Lambda_matrix = zeros(length(AC_branches),number_of_hours)
     for (line_idx, line) in AC_branches
@@ -254,9 +258,19 @@ function get_dual_branch(AC_branches, nodal_result,number_of_hours)
         t_bus = line["t_bus"]
         lambda_f = []
         lambda_t = []
-        for i in 1:number_of_hours
-            push!(lambda_f,nodal_result["$i"]["solution"]["bus"]["$f_bus"]["lam_kcl_r"])
-            push!(lambda_t,nodal_result["$i"]["solution"]["bus"]["$t_bus"]["lam_kcl_r"])
+        for j in 1:number_of_hours
+            i = j + start_hour-1
+            if string(f_bus) in keys(nodal_result["$i"]["solution"]["bus"])
+                push!(lambda_f,nodal_result["$i"]["solution"]["bus"]["$f_bus"]["lam_kcl_r"])
+            else 
+                push!(lambda_f,0)
+            end
+            if string(t_bus) in keys(nodal_result["$i"]["solution"]["bus"])
+                push!(lambda_t,nodal_result["$i"]["solution"]["bus"]["$t_bus"]["lam_kcl_r"])
+            else 
+                push!(lambda_t,0)
+            end
+            
         end
         lambda_branch = abs.(lambda_f .- lambda_t)
         Lambda_matrix[nr,:] = lambda_branch 
@@ -265,7 +279,7 @@ function get_dual_branch(AC_branches, nodal_result,number_of_hours)
 end
 
 
-function get_dual_branch_full(ne_branch,ne_branchDC,nodal_result,number_of_hours)
+function get_dual_branch_full(ne_branch,ne_branchDC,nodal_result,number_of_hours,start_hour)
     amount_cand = length(ne_branch)+length(ne_branchDC)
     Lambda_matrix = zeros(amount_cand,number_of_hours)
     #AC_candidates
@@ -276,7 +290,8 @@ function get_dual_branch_full(ne_branch,ne_branchDC,nodal_result,number_of_hours
         t_bus = branch["t_bus"]
         lambda_f = []
         lambda_t = []
-        for i in 1:number_of_hours
+        for j in 1:number_of_hours
+            i = j + start_hour -1
             push!(lambda_f,nodal_result["$i"]["solution"]["bus"]["$f_bus"]["lam_kcl_r"])
             push!(lambda_t,nodal_result["$i"]["solution"]["bus"]["$t_bus"]["lam_kcl_r"])
         end
@@ -655,11 +670,11 @@ function candidate_lines(nodal_input,OFF_dc_buses)
     for dc_bus in keys(nodal_input["busdc"])
         dc_bus = parse(Int64,dc_bus)
        
-        if !("$dc_bus" in keys(updated_OFF_DC_buses))
+        #if !("$dc_bus" in keys(updated_OFF_DC_buses))
             push!(bus_DC,dc_bus)
-        else
-            push!(bus_OFF_DC,dc_bus)
-        end
+        #else
+        #    push!(bus_OFF_DC,dc_bus)
+        #end
     end
     bus_DC = unique(bus_DC)
     bus_OFF_DC = unique(bus_OFF_DC)
@@ -691,7 +706,7 @@ function candidate_lines(nodal_input,OFF_dc_buses)
     ###########################
 
     ne_branch = Dict{String,Any}()
-    Branch_idx = 20000
+    Branch_idx = 200000
     for (bus1,bus2) in CL_exisAC
         exis_branch = nothing
         for b in keys(nodal_input["branch"])
@@ -720,7 +735,7 @@ function candidate_lines(nodal_input,OFF_dc_buses)
     end
 
     ne_branchDC = Dict{String,Any}()
-    Branch_idx = 30000
+    Branch_idx = 500000
     for (bus1,bus2) in CL_exisDC
         exis_branch = nothing
         for b in keys(nodal_input["branchdc"])
@@ -738,7 +753,7 @@ function candidate_lines(nodal_input,OFF_dc_buses)
         end
     end
 
-    for (bus1,bus2) in CL_newDC
+    for (bus1,bus2) in CL_newDC#_OFF
         exis_branch = deepcopy(nodal_input["branchdc"]["44"])
 
         ne_branchDC["$Branch_idx"] = exis_branch
@@ -748,6 +763,41 @@ function candidate_lines(nodal_input,OFF_dc_buses)
         ne_branchDC["$Branch_idx"]["index"] = Int(Branch_idx)
         ne_branchDC["$Branch_idx"]["name"] = "New DC branch (new)"
         Branch_idx = Branch_idx + 1
+    end
+
+    return ne_branch, ne_branchDC
+end
+
+
+function update_cost_data(ne_branch,ne_branchDC,nodal_input)
+    AC_cost_MWkm = 0.0012
+    DC_cost_MWkm = 0.00234
+    interest = 0.07
+    lifetime_AC = 20
+    lifetime_DC = 25
+    annuity_AC = 1/(((1+interest)^(lifetime_AC-1))/((1+interest)^(lifetime_AC*interest)))
+    annuity_DC = 1/(((1+interest)^(lifetime_DC-1))/((1+interest)^(lifetime_DC*interest)))
+
+    for (b,branch) in ne_branch
+        f_bus = branch["f_bus"]
+        t_bus = branch["t_bus"]
+        P = branch["rate_a"]*100 #MW
+        d = _EUGO.latlon2distance(nodal_input,Int(f_bus),Int(t_bus))
+        AC_cost = AC_cost_MWkm * d * P *10^6 #Euro
+        AC_cost_year = AC_cost * annuity_AC
+        AC_cost_hour = AC_cost_year/8760
+        branch["construction_cost"] = AC_cost_hour/100
+    end
+
+    for (b,branchdc) in ne_branchDC
+        f_bus = branchdc["fbusdc"]
+        t_bus = branchdc["tbusdc"]
+        P = branchdc["rateA"] *100 #MW
+        d = _EUGO.latlon2distance(nodal_input,Int(f_bus),Int(t_bus))
+        DC_cost = DC_cost_MWkm * d * P * 10^6 #Euro
+        DC_cost_year = DC_cost * annuity_DC
+        DC_cost_hour = DC_cost_year/8760
+        branchdc["cost"] = DC_cost_hour/100
     end
 
     return ne_branch, ne_branchDC

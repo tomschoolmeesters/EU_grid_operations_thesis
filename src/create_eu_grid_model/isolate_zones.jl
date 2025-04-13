@@ -223,7 +223,8 @@ end
 
 function add_border_gen!(zone_data, border_bus, border_zone)
 
-    number_of_gens = maximum([gen["index"] for (g, gen) in zone_data["gen"]])
+    #number_of_gens = maximum([gen["index"] for (g, gen) in zone_data["gen"]])
+    number_of_gens = maximum([gen["index"] for (g, gen) in zone_data["gen"] if gen["index"] < 100000])
     idx = number_of_gens + 1
 
     zone_data["gen"]["$idx"] = Dict{String, Any}()

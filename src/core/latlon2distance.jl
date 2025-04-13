@@ -22,10 +22,21 @@ function latlon2distance(data, branch)
 end
 
 function latlon2distance(data, bus1, bus2)
-    lat1 = data["bus"]["$bus1"]["lat"]
-    lon1 = data["bus"]["$bus1"]["lon"]
-    lat2 = data["bus"]["$bus2"]["lat"]
-    lon2 = data["bus"]["$bus2"]["lon"]
+    if string(bus1) in keys(data["bus"])
+        lat1 = data["bus"]["$bus1"]["lat"]
+        lon1 = data["bus"]["$bus1"]["lon"]
+    elseif string(bus1) in keys(data["busdc"])
+        lat1 = data["busdc"]["$bus1"]["lat"]
+        lon1 = data["busdc"]["$bus1"]["lon"]
+    end
+
+    if string(bus2) in keys(data["bus"])
+        lat2 = data["bus"]["$bus2"]["lat"]
+        lon2 = data["bus"]["$bus2"]["lon"]
+    elseif string(bus2) in keys(data["busdc"])
+        lat2 = data["busdc"]["$bus2"]["lat"]
+        lon2 = data["busdc"]["$bus2"]["lon"]
+    end
 
     R = 6371 # distance in kilometers
     φ1 = lat1 * pi/180 

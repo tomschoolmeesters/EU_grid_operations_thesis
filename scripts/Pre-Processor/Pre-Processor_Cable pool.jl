@@ -265,7 +265,7 @@ function candidate_lines(nodal_input,nodal_result,OFF_dc_buses,number_of_hours)
     end
 
     for (bus1,bus2) in CL_newAC
-        exis_branch = deepcopy(nodal_input["branch"]["7255"])
+        exis_branch = deepcopy(nodal_input["branch"]["8724"])
 
         ne_branch["$Branch_idx"] = exis_branch
         ne_branch["$Branch_idx"]["f_bus"] = Int(bus1)
@@ -295,7 +295,7 @@ function candidate_lines(nodal_input,nodal_result,OFF_dc_buses,number_of_hours)
     end
 
     for (bus1,bus2) in CL_newDC
-        exis_branch = deepcopy(nodal_input["branchdc"]["49"])
+        exis_branch = deepcopy(nodal_input["branchdc"]["87"])
 
         ne_branchDC["$Branch_idx"] = exis_branch
         ne_branchDC["$Branch_idx"]["fbusdc"] = Int(bus1)

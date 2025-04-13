@@ -50,13 +50,13 @@ include("Pre-Processor/Pre-Processor_Cable pool.jl")
  scenario = "DE"
  year = "2040"
  climate_year = "1984"
- hours = 1:10
+ hours = 100:119
  load_data = true
  use_case = "North_Sea_reloc"
  hour_start = 1
- hour_end = 10
- isolated_zones = ["BE"]#,"FR","UK","DE","NL","DK2","DK1"]#["BE","FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]
-relocate_wind = true
+ hour_end = 20
+ isolated_zones = ["BE"]#,"UK","DE","NL"]
+relocate_wind = false
 
 ############ LOAD EU grid data ############
 file = "./data_sources/European_grid_no_nseh.json"
@@ -149,30 +149,44 @@ timeseries_data = _EUGO.create_res_and_demand_time_series(wind_onshore, wind_off
 #    br["pt"] = 0
 #end
 
-push!(timeseries_data, "xb_flows" => _EUGO.get_xb_flows(zone_grid, zonal_result, zonal_input, zone_mapping)) 
+push!(timeseries_data, "xb_flows" => _EUGO.get_xb_flows(nodal_input, zonal_result, zonal_input, zone_mapping)) 
+term_hour = []
+for i in 1:200
+    hours = 2000:2144
+    # Create dictionary for writing out results
+    print("######################################", "\n")
+    print("####### PREPARING DATA      ##########", "\n")
+    @time mn_input_data = _EUGO.prepare_mn_data_nodal(zone_grid, EU_grid,timeseries_data, hours)
 
 
-# Create dictionary for writing out results
-print("######################################", "\n")
-print("####### PREPARING DATA      ##########", "\n")
-@time mn_input_data = _EUGO.prepare_mn_data_nodal(zone_grid, timeseries_data, hours)
+    
+    print("######################################", "\n")
+    print("####### STARTING OPTIMISATION ########", "\n")
+    #s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => true, "fix_cross_border_flows" => true)
+    #@time result = CbaOPF.solve_nodal_tnep(mn_input_data, _PM.DCPPowerModel, gurobi; multinetwork = true, setting = s) 
+
+    gurobi = JuMP.optimizer_with_attributes(
+        Gurobi.Optimizer,
+        "MIPGap" => 0.05,
+        "DualReductions"  => 0,
+        "FeasibilityTol" => 1e-6)         # Stop als de gap kleiner is dan 0.01
 
 
-print("######################################", "\n")
-print("####### STARTING OPTIMISATION ########", "\n")
-#s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => true, "fix_cross_border_flows" => true)
-#@time result = CbaOPF.solve_nodal_tnep(mn_input_data, _PM.DCPPowerModel, gurobi; multinetwork = true, setting = s) 
+    s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => true, "fix_cross_border_flows" => true, "process_data_internally" => true)#, "borders"=>[1,2,3,4,5,6,7,8,9,10,11,12])
+    @time result = _PMACDC.run_mp_tnepopf(mn_input_data,_PM.DCPPowerModel, gurobi, multinetwork = true; setting = s)
 
-gurobi = JuMP.optimizer_with_attributes(
-    Gurobi.Optimizer,
-    "MIPGap" => 0.05)         # Stop als de gap kleiner is dan 0.01
-
-
-s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => true, "fix_cross_border_flows" => true, "process_data_internally" => false)#, "borders"=>[1,2,3,4,5,6,7,8,9,10,11,12])
-@time result = _PMACDC.run_mp_tnepopf(mn_input_data,_PM.DCPPowerModel, gurobi, multinetwork = true; setting = s)
-
+    push!(term_hour,result["termination_status"])
+end
 plot_filename = joinpath("results", join(["grid_input_tnep",use_case,".pdf"]))
 plot_grid_tnep(zone_grid,plot_filename)
+
+
+json_string = JSON.json(result)
+result_file_name = joinpath(_EUGO.BASE_DIR, "results", "TNEP"*tyndp_version, join(["result_tnep_BENL_", scenario*year,"_", climate_year, ".json"]))
+open(result_file_name,"w") do f
+  JSON.print(f, json_string)
+end
+
 
 cap  = zeros(1, maximum(parse.(Int, collect(keys(zone_grid["branch"])))))
 for (n, network) in result["solution"]["nw"]
