@@ -26,6 +26,25 @@ function median_sytem_price(nodal_result)
     return average_price
 end
 
+function OFF_AC_buses(nodal_input, OFF_DC_buses)
+    AC_buses = []
+    for (g,gen) in nodal_input["gen"]
+        if gen["type_tyndp"] == "Offshore Wind"
+            gen_bus = gen["gen_bus"]
+            push!(AC_buses, gen_bus)
+        end
+    end
+    for (c,conv) in nodal_input["convdc"]
+        DC_buses_OFF = collect(keys(OFF_DC_buses))
+        if string(conv["busdc_i"]) in DC_buses_OFF
+            AC_bus = conv["busac_i"]
+            push!(AC_buses, AC_bus)
+        end
+    end
+    AC_buses = unique(AC_buses)
+    return AC_buses
+end
+
 function is_point_in_polygon(point, polygon)
     lat, lon = point
     n = length(polygon)
@@ -367,6 +386,57 @@ function compute_wcss(hc, D, max_k)
     return wcss
 end
 
+function get_timeseries_matrix(timeseries_data)
+    wind_onshore = zeros(1,8760)
+    wind_offshore = zeros(1,8760)
+    solar_pv = zeros(1,8760)
+    demand = zeros(1,8760)
+    for i in 1:8760
+        for zone in keys(timeseries_data["wind_onshore"])
+            wind_onshore[i] += timeseries_data["wind_onshore"]["$zone"][i]
+            wind_offshore[i] += timeseries_data["wind_offshore"]["$zone"][i]
+            solar_pv[i] += timeseries_data["solar_pv"]["$zone"][i]
+            demand[i] += timeseries_data["demand"]["$zone"][i]
+        end
+    end
+    
+    timeseries_matrix = zeros(4, 8760)
+    timeseries_matrix[1,:] = wind_onshore
+    timeseries_matrix[2,:] = wind_offshore
+    timeseries_matrix[3,:] = solar_pv
+    timeseries_matrix[4,:] = demand
+    timeseries_matrix = timeseries_matrix'
+
+    return timeseries_matrix
+end
+
+function get_distance_matrix_timeseries(timesereis_data)
+    timeseries_matrix= get_timeseries_matrix(timesereis_data)
+    Corr = cor(timeseries_matrix')
+    #Corr[isnan.(Corr)] .= 0
+    Dist = 1 .- Corr
+    return Dist
+end
+
+# Bereken de WCSS voor verschillende aantal clusters
+function compute_wcss(hc, D, max_k)
+    wcss = Float64[]
+    for k in 1:max_k
+        labels = cutree(hc, k=k)  # Cluster labels bepalen
+        total_variance = 0.0
+        for i in 1:k
+            cluster_indices = findall(labels .== i)
+            if length(cluster_indices) > 1
+                cluster_distances = D[cluster_indices, cluster_indices]
+                total_variance += sum(cluster_distances) / (2 * length(cluster_indices))
+            end
+        end
+        push!(wcss, total_variance)
+    end
+    return wcss
+end
+
+
 ##################################
 ##################################
 
@@ -566,7 +636,7 @@ function candidate_lines(nodal_input,nodal_result,OFF_dc_buses,number_of_hours)
             Branch_idx = Branch_idx + 1
         end
     end
-
+    AC_new_corridor_idx = Branch_idx
     for (bus1,bus2) in CL_newAC
         exis_branch = deepcopy(nodal_input["branch"]["8659"])
 
@@ -596,7 +666,7 @@ function candidate_lines(nodal_input,nodal_result,OFF_dc_buses,number_of_hours)
             Branch_idx = Branch_idx + 1
         end
     end
-
+    DC_new_corridor_idx = Branch_idx
     for (bus1,bus2) in CL_newDC
         exis_branch = deepcopy(nodal_input["branchdc"]["32"])
 
@@ -616,7 +686,7 @@ function candidate_lines(nodal_input,nodal_result,OFF_dc_buses,number_of_hours)
     zone_grid_ext["branchdc_ne"] = deepcopy(ne_branchDC)
     zone_grid_ext["ne_branch"] = deepcopy(ne_branch)
 
-    return zone_grid_ext
+    return zone_grid_ext, AC_new_corridor_idx, DC_new_corridor_idx
 end
 
 
@@ -624,6 +694,7 @@ end
 function candidate_lines(nodal_input,OFF_dc_buses)
 
     updated_OFF_DC_buses = update_connectionzone(OFF_dc_buses)
+    OFF_ac_buses = OFF_AC_buses(nodal_input, OFF_dc_buses)
     
     ################################
     ### Initialise Candidate Set ###
@@ -661,20 +732,22 @@ function candidate_lines(nodal_input,OFF_dc_buses)
 
 
     for bus in keys(nodal_input["bus"])
-        bus = parse(Int64,bus)
-        #bus_zone = nodal_input["bus"]["$bus"]["zone"]
-        push!(bus_AC,bus)
+        bus = parse(Int,bus)
+        if !(bus in OFF_ac_buses)
+            #bus_zone = nodal_input["bus"]["$bus"]["zone"]
+            push!(bus_AC,bus)
+        end
     end
     bus_AC = unique(bus_AC)
 
     for dc_bus in keys(nodal_input["busdc"])
         dc_bus = parse(Int64,dc_bus)
        
-        #if !("$dc_bus" in keys(updated_OFF_DC_buses))
+        if !("$dc_bus" in keys(updated_OFF_DC_buses))
             push!(bus_DC,dc_bus)
-        #else
-        #    push!(bus_OFF_DC,dc_bus)
-        #end
+        else
+            push!(bus_OFF_DC,dc_bus)
+        end
     end
     bus_DC = unique(bus_DC)
     bus_OFF_DC = unique(bus_OFF_DC)
@@ -682,8 +755,15 @@ function candidate_lines(nodal_input,OFF_dc_buses)
 
     for (bus1, bus2) in combinations(bus_AC, 2)  # Alle unieke AC-AC combinaties
         if !((bus1, bus2) in CL_exisAC) && !((bus2, bus1) in CL_exisAC)
+            bus1_int = Int(bus1)
+            bus2_int = Int(bus2)
+            zone1 = nodal_input["bus"]["$bus1_int"]["zone"]
+            zone2 = nodal_input["bus"]["$bus2_int"]["zone"]
             if _EUGO.latlon2distance(nodal_input,Int(bus1),Int(bus2)) <= 100
-                push!(CL_newAC,(bus1,bus2))
+                if !(zone1 == "UK" && zone2 != "UK") && !(zone2 == "UK" && zone1 != "UK")
+                    
+                    push!(CL_newAC,(bus1,bus2))
+                end
             end
         end
     end
@@ -722,13 +802,16 @@ function candidate_lines(nodal_input,OFF_dc_buses)
             Branch_idx = Branch_idx + 1
         end
     end
-
+    AC_new_corridor_idx = Branch_idx
     for (bus1,bus2) in CL_newAC
         exis_branch = deepcopy(nodal_input["branch"]["371"])
 
         ne_branch["$Branch_idx"] = exis_branch
         ne_branch["$Branch_idx"]["f_bus"] = Int(bus1)
         ne_branch["$Branch_idx"]["t_bus"] = Int(bus2)
+        ne_branch["$Branch_idx"]["rate_a"] = 10
+        ne_branch["$Branch_idx"]["rate_b"] = 10 
+        ne_branch["$Branch_idx"]["rate_c"] = 10
         ne_branch["$Branch_idx"]["source_id"][2] = Int(Branch_idx)
         ne_branch["$Branch_idx"]["index"] = Int(Branch_idx)
         Branch_idx = Branch_idx + 1
@@ -752,8 +835,8 @@ function candidate_lines(nodal_input,OFF_dc_buses)
             Branch_idx = Branch_idx + 1
         end
     end
-
-    for (bus1,bus2) in CL_newDC#_OFF
+    DC_new_corridor_idx = Branch_idx
+    for (bus1,bus2) in CL_newDC_OFF
         exis_branch = deepcopy(nodal_input["branchdc"]["44"])
 
         ne_branchDC["$Branch_idx"] = exis_branch
@@ -765,7 +848,7 @@ function candidate_lines(nodal_input,OFF_dc_buses)
         Branch_idx = Branch_idx + 1
     end
 
-    return ne_branch, ne_branchDC
+    return ne_branch, ne_branchDC, AC_new_corridor_idx, DC_new_corridor_idx
 end
 
 
@@ -786,7 +869,7 @@ function update_cost_data(ne_branch,ne_branchDC,nodal_input)
         AC_cost = AC_cost_MWkm * d * P *10^6 #Euro
         AC_cost_year = AC_cost * annuity_AC
         AC_cost_hour = AC_cost_year/8760
-        branch["construction_cost"] = AC_cost_hour/100
+        branch["construction_cost"] = AC_cost_hour/100/100
     end
 
     for (b,branchdc) in ne_branchDC
@@ -797,7 +880,7 @@ function update_cost_data(ne_branch,ne_branchDC,nodal_input)
         DC_cost = DC_cost_MWkm * d * P * 10^6 #Euro
         DC_cost_year = DC_cost * annuity_DC
         DC_cost_hour = DC_cost_year/8760
-        branchdc["cost"] = DC_cost_hour/100
+        branchdc["cost"] = DC_cost_hour/100/100
     end
 
     return ne_branch, ne_branchDC

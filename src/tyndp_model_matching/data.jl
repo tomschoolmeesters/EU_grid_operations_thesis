@@ -243,7 +243,7 @@ function prepare_mn_data(data, nodal_data, hours)
     return mn_data
 end
 
-function prepare_mn_data_nodal(grid_data,timeseries_data,hours)
+function prepare_mn_data_nodal(grid_data,EU_grid,timeseries_data,hours)
     mn_data = _IM.replicate(grid_data, length(hours), Set{String}(["source_type", "name", "source_version", "per_unit"]))
     
     for h_idx in 1:length(hours)
@@ -255,11 +255,14 @@ function prepare_mn_data_nodal(grid_data,timeseries_data,hours)
                 zone = load["zone"]
             end
             if haskey(timeseries_data["demand"], zone)
-                max_demand = (timeseries_data["max_demand"][zone] / grid_data["baseMVA"])# / load["country_peak_load"]
+                ratio = (timeseries_data["max_demand"][zone] / grid_data["baseMVA"]) / load["country_peak_load"]
+                #max_demand = (timeseries_data["max_demand"][zone] / grid_data["baseMVA"])# / load["country_peak_load"]
                 if zone == "NO1" || zone == "NO2" # comes from the weird tyndp data where the demand for the NO zones is somewhat aggregated!!!!!
-                    max_demand = max_demand / 2
+                    #max_demand = max_demand / 2
+                    ratio = ratio/2
                 end
-                load["pd"] =  timeseries_data["demand"][zone][hour] * max_demand *load["powerportion"] #grid_data["load"][l]["pd"] * ratio
+                #load["pd"] =  timeseries_data["demand"][zone][hour] * max_demand *load["powerportion"] #grid_data["load"][l]["pd"] * ratio
+                load["pd"] =  timeseries_data["demand"][zone][hour] * EU_grid["load"][l]["pd"] * ratio
             end
         end
 

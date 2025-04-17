@@ -144,16 +144,15 @@ end
 # (2) a specified zone, e.g. create_res_time_series(wind_onshore, wind_offshore, pv, zone_mapping; zone = "DE")
 timeseries_data = _EUGO.create_res_and_demand_time_series(wind_onshore, wind_offshore, pv, scenario_data, climate_year, zone_mapping; zones = isolated_zones)
 
-#for (br_id,br) in zonal_result["1"]["solution"]["branch"]
-#    br["pf"] = 0
-#    br["pt"] = 0
-#end
+for (br_id,br) in zonal_result["1"]["solution"]["branch"]
+    br["pf"] = 0
+    br["pt"] = 0
+end
 
 push!(timeseries_data, "xb_flows" => _EUGO.get_xb_flows(nodal_input, zonal_result, zonal_input, zone_mapping)) 
 term_hour = []
-for i in 1:200
-    hours = 2000:2144
-    # Create dictionary for writing out results
+for i in 2000:2020
+    hours = 2000:2072    # Create dictionary for writing out results
     print("######################################", "\n")
     print("####### PREPARING DATA      ##########", "\n")
     @time mn_input_data = _EUGO.prepare_mn_data_nodal(zone_grid, EU_grid,timeseries_data, hours)
@@ -167,7 +166,7 @@ for i in 1:200
 
     gurobi = JuMP.optimizer_with_attributes(
         Gurobi.Optimizer,
-        "MIPGap" => 0.05,
+        "MIPGap" => 0.01,
         "DualReductions"  => 0,
         "FeasibilityTol" => 1e-6)         # Stop als de gap kleiner is dan 0.01
 

@@ -5,20 +5,20 @@
 nodal_input_ext = deepcopy(nodal_input)
 
 for (i,branch) in result["solution"]["nw"]["1"]["ne_branch"]
-    if branch["built"] == 1
-        nodal_input_ext["branch"]["203424"] = Dict{String,Any}()
-        nodal_input_ext["branch"]["203424"] = zone_grid["ne_branch"]["203424"]
+    if branch["built"] == 1 && i != "239194"
+        nodal_input_ext["branch"]["$i"] = Dict{String,Any}()
+        nodal_input_ext["branch"]["$i"] = zone_grid["ne_branch"]["$i"]
     end
 end
 for (i,branch) in result["solution"]["nw"]["1"]["branchdc_ne"]
-    if branch["isbuilt"] == 1
+    if branch["isbuilt"] == 1 && i != "500205"
         nodal_input_ext["branchdc"]["$i"] = Dict{String,Any}()
         nodal_input_ext["branchdc"]["$i"] = zone_grid["branchdc_ne"]["$i"]
     end
 end
 
 hour_start_idx = 2000
-hour_end_idx = 2024
+hour_end_idx = 2072
 
 plot_filename = joinpath("results", join(["grid_input_",use_case,".pdf"]))
 _EUGO.plot_grid(nodal_input_ext, plot_filename)

@@ -25,10 +25,14 @@ function scale_generation!(tyndp_capacity, grid_data, scenario, climate_year, zo
         end
         for tyndp_zone in tyndp_zones
             # obtain 
-            zonal_capacity = get_generation_capacity(tyndp_capacity, scenario, type, climate_year, tyndp_zone)
+            zonal_capacity = _EUGO.get_generation_capacity(tyndp_capacity, scenario, type, climate_year, tyndp_zone)
             if !isempty(zonal_capacity)
                 zonal_tyndp_capacity =  zonal_tyndp_capacity + zonal_capacity[1]
             end
+        end
+
+        if type == "Offshore Wind" 
+            zonal_tyndp_capacity = zonal_tyndp_capacity * 3
         end
 
         # If the zonal capacity is different than zero, scale "pmax" based on the ratios of the zonal capacities

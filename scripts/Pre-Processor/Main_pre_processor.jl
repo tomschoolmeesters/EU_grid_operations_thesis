@@ -107,7 +107,45 @@ function PTDF_analysis_full(nodal_input,nodal_result,number_of_hours,ne_branch,n
             Powerflow_matrix[i, j] = abs(PTDF_matrix[i, t_idx] - PTDF_matrix[i, f_idx]) * rating
         end
     end
+
+    using Distances
+    X = Powerflow_matrix;
+
+    # Pas PCA toe om het aantal dimensies te reduceren
+    using MultivariateStats
+    pca = fit(PCA, Powerflow_matrix; maxoutdim=300);
+    X_reduced = MultivariateStats.transform(pca, Powerflow_matrix);
+
+    # Voer MiniBatchKMeans clustering uit
+    @time result = kmeans(X_reduced, 10000; maxiter=10)
+
+    assignment = result.assignments;
+
+        # Maak een mapping van cluster naar een voorbeeldindex
+    cluster_to_index = Dict{Int, Int}();
+
+    for (idx, cl) in enumerate(assignment)
+        if !haskey(cluster_to_index, cl)
+            cluster_to_index[cl] = idx  # Eerste keer dat dit cluster voorkomt
+        end
+    end
+    clusters = DefaultDict{Int, Vector{Int}}(Vector{Int})
+    for (idx, cluster_id) in enumerate(assignment)
+        push!(clusters[cluster_id], idx)
+    end
+
+    cluster = clusters[648]
     
+    plot_filename = joinpath("results", join(["grid_cluster",use_case,".pdf"]))
+    plot_branches(zone_grid, cluster,plot_filename)
+
+        # Verzamel de geselecteerde kolommen
+    selected_indices = collect(values(cluster_to_index))
+    selected_indices_sorted = sort(selected_indices)  # Optioneel: voor consistente volgorde
+
+    # Haal de kolommen uit de originele matrix
+    Powerflow_reduced = Powerflow_matrix[:, selected_indices_sorted]
+
     #for i in 1:size(PTDF_matrix, 1) # i = elke bestaande AC_branch 
         #AC_candidates first
     #    for (idx, branch) in ne_branch
@@ -144,10 +182,32 @@ function PTDF_analysis_full(nodal_input,nodal_result,number_of_hours,ne_branch,n
     #Impact_matrix = Array{Float32}(undef, size(Powerflow_matrix, 1), size(Powerflow_matrix, 2), number_of_hours)
     #for h in 1:number_of_hours
     #    Impact_matrix[:, :, h] .= Powerflow_matrix .* Lambda_matrix[:, h]
-    #end
-    Impact_matrix = map(h -> Powerflow_matrix .* Lambda_matrix[:, h], 1:number_of_hours)
+    #end    
+    @time Impact_matrix = map(h -> Powerflow_reduced .* Lambda_matrix[:, h], 1:number_of_hours)
+
     return Impact_matrix   
 end
+
+
+
+using StatsBase
+
+function winsorize_matrix!(matrix, lower_pct, upper_pct)
+    # Flatten de matrix naar een vector
+    flat_data = vec(matrix)
+    # Bepaal de grenswaarden
+    lower = quantile(flat_data, lower_pct)
+    upper = quantile(flat_data, upper_pct)
+    # Pas de grenzen toe op de matrix
+    matrix .= clamp.(matrix, lower, upper)
+end
+
+threshold = 150
+num_above_threshold = count(x -> x > threshold, Lambda_matrix)
+total_elements = length(Lambda_matrix)
+upper_pct = 1.0 - (num_above_threshold / total_elements)
+
+winsorize_matrix!(Lambda_matrix, 0, upper_pct)
 
 
 
@@ -155,7 +215,7 @@ end
 function pre_processor()
 
     #1: Create all possible candidates (AC & DC)
-    ne_branch, ne_branchDC = candidate_lines(nodal_input,OFF_dc_buses)
+    ne_branch, ne_branchDC, AC_new_corridor_idx, DC_new_corridor_idx = candidate_lines(nodal_input,OFF_dc_buses)
 
     #2: Include cost data for every candidate (AC & DC)
     ne_branch, ne_branchDC = update_cost_data(ne_branch,ne_branchDC,nodal_input)
@@ -165,16 +225,119 @@ function pre_processor()
 
     #4: Filter candidates based on their impact
     amount_cand = length(ne_branch)+length(ne_branchDC)
+    
+    Impact2 = zeros(Float64, length(selected_indices), 2)
+
+    for i in 1:length(selected_indices)
+        som = 0.0
+        for h in 1:length(Impact_matrix)
+            som += sum(Impact_matrix[h][:, i])
+        end
+        idx = selected_indices[i]
+        if idx <= length(ne_branch)
+            AC_index = idx + 200000 - 1
+            Impact2[i, 1] = AC_index
+            Impact2[i, 2] = som
+        else
+            DC_index = idx + 500000 - length(ne_branch) - 1
+            Impact2[i, 1] = DC_index
+            Impact2[i, 2] = som
+        end
+    end
+    
+
+    for i in 1:length(selected_indices)
+        som = 0.0
+        for h in 1:length(Impact_matrix)
+            som += sum(Impact_matrix[h][:, i])
+        end
+        lambda_f = []
+        lambda_t = []
+        idx = selected_indices[i]
+        if idx <= length(ne_branch)
+            AC_index = idx + 200000 - 1
+            if idx < AC_new_corridor_idx
+                Impact2[i, 1] = AC_index
+                Impact2[i, 2] = som
+            else
+                f_bus = ne_branch["$AC_index"]["f_bus"]
+                t_bus = ne_branch["$AC_index"]["t_bus"]
+                for i in 1:number_of_hours
+                    h = i + start_hour - 1
+                    push!(lambda_f,nodal_result["$h"]["solution"]["bus"]["$f_bus"]["lam_kcl_r"])
+                    push!(lambda_t,nodal_result["$h"]["solution"]["bus"]["$t_bus"]["lam_kcl_r"])
+                end
+                som += sum(ne_branch["$AC_index"]["rate_a"] * abs.(lambda_f - lambda_t))
+                Impact2[i, 1] = AC_index
+                Impact2[i, 2] = som
+            end
+            
+        else
+            DC_index = idx + 500000 - length(ne_branch) - 1
+            if DC_index < DC_new_corridor_idx
+                Impact2[i, 1] = DC_index
+                Impact2[i, 2] = som
+            else
+                f_busdc = ne_branchDC["$DC_index"]["fbusdc"]
+                t_busdc = ne_branchDC["$DC_index"]["tbusdc"]
+                f_busac = dc_to_ac_map[f_busdc]
+                t_busac = dc_to_ac_map[t_busdc]
+                for i in 1:number_of_hours
+                    h = i + start_hour - 1
+                    push!(lambda_f,nodal_result["$h"]["solution"]["bus"]["$f_busac"]["lam_kcl_r"])
+                    push!(lambda_t,nodal_result["$h"]["solution"]["bus"]["$t_busac"]["lam_kcl_r"])
+                end
+                som += sum(ne_branchDC["$DC_index"]["rateA"] * abs.(lambda_f - lambda_t))
+                Impact2[i, 1] = DC_index
+                Impact2[i, 2] = som
+            end
+        end       
+    end
+
+    filename = "Impact_North.xlsx"
+    headers = ["Index", "Impact Sum"]
+
+        # Open een nieuw Excel-bestand en schrijf de vector naar de eerste kolom
+        XLSX.openxlsx(filename, mode="w") do xf
+            sheet = xf[1]
+            sheet[1, 1] = headers[1]
+            sheet[1, 2] = headers[2]
+            for i in 1:size(Impact2, 1)
+                sheet[i+1, 1] = Impact2[i, 1]
+                sheet[i+1, 2] = Impact2[i, 2]
+            end
+        end
+ 
+
+    AC_indices = []
+    DC_indices = []
+    for idx in selected_indices_sorted
+        if idx <= length(ne_branch)
+            AC_index = idx + 200000 -1
+            push!(AC_indices, AC_index)
+        end
+        if idx > length(ne_branch)
+            DC_index = idx + 500000 - length(ne_branch) - 1
+            push!(DC_indices,DC_index)
+        end
+    end    
+
+    indices = vcat(AC_indices,DC_indices)
+    ###########################  
+    
+    
     Impact = Vector()
     for i in 1:amount_cand
         push!(Impact,sum(Impact_matrix[:,i,:]))
     end
-    Impact = zeros(Float64, amount_cand)  # amount_cand
 
-    for i in 1:amount_cand
+    Impact = zeros(Float64, length(selected_indices))  # amount_cand
+
+    for i in 1:length(selected_indices)
         som = 0
+        
         for h in 1:length(Impact_matrix)
-            som += sum(Impact_matrix[h][:,i][1:200])
+            som += sum(Impact_matrix[h][:,i])
         end
         Impact[i] = som
     end
@@ -188,7 +351,66 @@ function pre_processor()
                 sheet["A$(i+1)"] = Impact[i]  # Schrijf elk element onder elkaar
             end
         end
+
+
+    Impact = zeros(Float64, amount_cand)  # amount_cand
+    dc_to_ac_map = Dict(conv["busdc_i"] => conv["busac_i"] for (_, conv) in nodal_input["convdc"])
+    for i in 1:amount_cand
+        som = 0
+        for h in 1:length(Impact_matrix)
+            som += sum(Impact_matrix[h][:,i][1:200])
+        end
+        lambda_f = Float64[]
+        lambda_t = Float64[]
+        if i <= length(ne_branch)
+            idx = i + 200000 - 1
+            if idx < AC_new_corridor_idx
+                Impact[i] = som
+            else
+                f_bus = ne_branch["$idx"]["f_bus"]
+                t_bus = ne_branch["$idx"]["t_bus"]
+                for i in 1:number_of_hours
+                    h = i + start_hour - 1
+                    push!(lambda_f,nodal_result["$h"]["solution"]["bus"]["$f_bus"]["lam_kcl_r"])
+                    push!(lambda_t,nodal_result["$h"]["solution"]["bus"]["$t_bus"]["lam_kcl_r"])
+                end
+                som += sum(ne_branch["$idx"]["rate_a"] * abs.(lambda_f - lambda_t))
+                Impact[i] = som
+            end
+        else
+            idx = i + 500000 - 1 - length(ne_branch)
+            if idx < DC_new_corridor_idx
+                Impact[i] = som
+            else
+                f_busdc = ne_branchDC["$idx"]["fbusdc"]
+                t_busdc = ne_branchDC["$idx"]["tbusdc"]
+                f_busac = dc_to_ac_map[f_busdc]
+                t_busac = dc_to_ac_map[t_busdc]
+                for i in 1:number_of_hours
+                    h = i + start_hour - 1
+                    push!(lambda_f,nodal_result["$h"]["solution"]["bus"]["$f_busac"]["lam_kcl_r"])
+                    push!(lambda_t,nodal_result["$h"]["solution"]["bus"]["$t_busac"]["lam_kcl_r"])
+                end
+                som += sum(ne_branchDC["$idx"]["rateA"] * abs.(lambda_f - lambda_t))
+                Impact[i] = som
+            end
+        end
+        
+    end
+    filename = "Impact_North.xlsx"
+
+        # Open een nieuw Excel-bestand en schrijf de vector naar de eerste kolom
+        XLSX.openxlsx(filename, mode="w") do xf
+            sheet = xf[1]  # Gebruik het eerste werkblad
+            sheet["A1"] = "Impact"  # Zet een kolomtitel
+            for i in 1:length(Impact)
+                sheet["A$(i+1)"] = Impact[i]  # Schrijf elk element onder elkaar
+            end
+        end
     
+
+    #########################
+
     Cost = []
     for i in 1:amount_cand
         if i<=length(ne_branch)
@@ -213,9 +435,30 @@ function pre_processor()
         end
 
 
+    Impact_sorted = Impact2[sortperm(Impact2[:, 2], rev = true), :]
+    n_top = ceil(Int, 0.05 * size(Impact_sorted, 1))  # aantal bovenste elementen
+    top_indices = Impact_sorted[1:n_top, 1] 
+    random_indices = rand(Impact_sorted[:,1], 100)
+
+    final_indices = vcat(top_indices, random_indices)
+    final_indices = unique(final_indices)
+
+
+    corrected_indices_AC = []
+    corrected_indices_DC = []
+    for i in final_indices
+        if i < 500000
+            i = Int(i)
+            push!(corrected_indices_AC,i)
+        else
+            i = Int(i)
+            push!(corrected_indices_DC,i)
+        end
+    end
+
     indices = collect(1:length(Impact))
     sorted_indices = sortperm(Impact, rev=true)
-    top_n = ceil(Int, 0.8 * length(Impact))
+    top_n = ceil(Int, 0.01 * length(Impact))
     top_indices = sorted_indices[1:top_n]
     corrected_indices_AC = []
     corrected_indices_DC = []
@@ -235,10 +478,10 @@ function pre_processor()
     zone_grid["ne_branch"] = Dict{String,Any}()
     zone_grid["branchdc_ne"] = Dict{String,Any}()
 
-    for i in corrected_indices_AC
+    for i in corrected_indices_AC#keys(ne_branch)#keys(ne_branch)
         zone_grid["ne_branch"]["$i"] = ne_branch["$i"]
     end
-    for i in corrected_indices_DC
+    for i in corrected_indices_DC#keys(ne_branchDC)#
         zone_grid["branchdc_ne"]["$i"] = ne_branchDC["$i"]
     end
 
