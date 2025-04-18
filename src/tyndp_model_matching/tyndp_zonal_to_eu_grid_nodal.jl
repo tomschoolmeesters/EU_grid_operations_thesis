@@ -6,6 +6,14 @@
 # zone_mapping ::Dict{String, Any} - Dictionary containing the mapping of zone names between both models
 # ns_hub_cap ::Float64 - Capacity of the North Sea energy hub as optional keyword argument. Default value coming from the grid model is 10 GW.
 function scale_generation!(tyndp_capacity, grid_data, scenario, climate_year, zone_mapping; ns_hub_cap = nothing, exclude_offshore_wind = false)
+    wind_scale = Dict{String, Float64}()
+    wind_scale["BE"] = 8000/6200
+    wind_scale["DE"] = 60000/20000
+    wind_scale["NL"] = 50000/10000
+    wind_scale["UK"] = 60000/21035
+    wind_scale["DK1"] = 5000/1950
+    wind_scale["DK2"] = 15000/6735
+
     for (g, gen) in grid_data["gen"]
         zone = gen["zone"]
 
@@ -32,7 +40,11 @@ function scale_generation!(tyndp_capacity, grid_data, scenario, climate_year, zo
         end
 
         if type == "Offshore Wind" 
-            zonal_tyndp_capacity = zonal_tyndp_capacity * 3
+            if zone in keys(wind_scale)
+                zonal_tyndp_capacity = zonal_tyndp_capacity * wind_scale["$zone"]
+            else
+                zonal_tyndp_capacity = zonal_tyndp_capacity * 2
+            end
         end
 
         # If the zonal capacity is different than zero, scale "pmax" based on the ratios of the zonal capacities
