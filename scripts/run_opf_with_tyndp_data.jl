@@ -83,7 +83,7 @@ _EUGO.scale_generation!(tyndp_capacity, EU_grid, scenario_id, climate_year, zone
 
 # Isolate zone: input is vector of strings, if you need to relax the fixing border flow assumptions use:
 # _EUGO.isolate_zones(EU_grid, ["DE"]; border_slack = x), this will leas to (1-slack)*xb_flow_ref < xb_flow < (1+slack)*xb_flow_ref
-zone_grid = _EUGO.isolate_zones(EU_grid, isolated_zones, border_slack = 0.03) #you allow a 1% slack compared to the power flows computed through the zonal model, which might leave a bit more freedom to the optimizer compared to a strict equality constraint on the flow
+zone_grid = _EUGO.isolate_zones(EU_grid, isolated_zones, border_slack = 0.03) #you allow a 3% slack compared to the power flows computed through the zonal model, which might leave a bit more freedom to the optimizer compared to a strict equality constraint on the flow
 
 
 #for (l, load) in zone_grid["load"]
@@ -92,6 +92,8 @@ zone_grid = _EUGO.isolate_zones(EU_grid, isolated_zones, border_slack = 0.03) #y
 #  load["cost_curt"] = 10e5 * zone_grid["baseMVA"]
 #  load["flex"] = 1
 #end
+
+gen_costs["Offshore Wind"] = 17
 
 gen_costs["Offshore Wind"] = 17
 
@@ -117,6 +119,7 @@ push!(timeseries_data, "xb_flows" => _EUGO.get_xb_flows(zone_grid, zonal_result,
 
 # Start runnning hourly OPF calculations
 hour_start_idx = 2000
+hour_end_idx = 2072
 hour_end_idx = 2072
 
 plot_filename = joinpath("results", join(["grid_input_",use_case,".pdf"]))

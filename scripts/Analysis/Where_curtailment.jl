@@ -1,11 +1,11 @@
 function where_curtailment()
-    start_hour = 1;
+    start_hour = 2000;
     where_curtailment = Dict()
     gen_types = Dict("Solar PV" => "solar_pv", 
                      "Onshore Wind" => "wind_onshore", 
                      "Offshore Wind" => "wind_offshore")
 
-    for g in keys(nodal_result["1"]["solution"]["gen"])
+    for g in keys(nodal_result["$start_hour"]["solution"]["gen"])
         gen_info = nodal_input["gen"]["$g"]
         gen_type_tyndp = get(gen_info, "type_tyndp", nothing)
         
@@ -36,13 +36,13 @@ end
 
 using Plots
 function scatter_curtailment()
-    start_hour = 1;
+    start_hour = 2000;
     Curt = Dict()
     gen_types = Dict("Solar PV" => "solar_pv", 
                      "Onshore Wind" => "wind_onshore", 
                      "Offshore Wind" => "wind_offshore")
 
-    for g in keys(nodal_result["1"]["solution"]["gen"])
+    for g in keys(nodal_result["2000"]["solution"]["gen"])
         gen_info = nodal_input["gen"]["$g"]
         gen_type_tyndp = get(gen_info, "type_tyndp", nothing)
         

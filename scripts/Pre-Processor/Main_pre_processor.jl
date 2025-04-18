@@ -264,10 +264,15 @@ function pre_processor()
 
     Impact = zeros(Float64, length(selected_indices))  # amount_cand
 
+    Impact = zeros(Float64, length(selected_indices))  # amount_cand
+
+    for i in 1:length(selected_indices)
     for i in 1:length(selected_indices)
         som = 0
         
+        
         for h in 1:length(Impact_matrix)
+            som += sum(Impact_matrix[h][:,i])
             som += sum(Impact_matrix[h][:,i])
         end
         Impact[i] = som
@@ -282,6 +287,66 @@ function pre_processor()
                 sheet["A$(i+1)"] = Impact[i]  # Schrijf elk element onder elkaar
             end
         end
+
+
+    Impact = zeros(Float64, amount_cand)  # amount_cand
+    dc_to_ac_map = Dict(conv["busdc_i"] => conv["busac_i"] for (_, conv) in nodal_input["convdc"])
+    for i in 1:amount_cand
+        som = 0
+        for h in 1:length(Impact_matrix)
+            som += sum(Impact_matrix[h][:,i][1:200])
+        end
+        lambda_f = Float64[]
+        lambda_t = Float64[]
+        if i <= length(ne_branch)
+            idx = i + 200000 - 1
+            if idx < AC_new_corridor_idx
+                Impact[i] = som
+            else
+                f_bus = ne_branch["$idx"]["f_bus"]
+                t_bus = ne_branch["$idx"]["t_bus"]
+                for i in 1:number_of_hours
+                    h = i + start_hour - 1
+                    push!(lambda_f,nodal_result["$h"]["solution"]["bus"]["$f_bus"]["lam_kcl_r"])
+                    push!(lambda_t,nodal_result["$h"]["solution"]["bus"]["$t_bus"]["lam_kcl_r"])
+                end
+                som += sum(ne_branch["$idx"]["rate_a"] * abs.(lambda_f - lambda_t))
+                Impact[i] = som
+            end
+        else
+            idx = i + 500000 - 1 - length(ne_branch)
+            if idx < DC_new_corridor_idx
+                Impact[i] = som
+            else
+                f_busdc = ne_branchDC["$idx"]["fbusdc"]
+                t_busdc = ne_branchDC["$idx"]["tbusdc"]
+                f_busac = dc_to_ac_map[f_busdc]
+                t_busac = dc_to_ac_map[t_busdc]
+                for i in 1:number_of_hours
+                    h = i + start_hour - 1
+                    push!(lambda_f,nodal_result["$h"]["solution"]["bus"]["$f_busac"]["lam_kcl_r"])
+                    push!(lambda_t,nodal_result["$h"]["solution"]["bus"]["$t_busac"]["lam_kcl_r"])
+                end
+                som += sum(ne_branchDC["$idx"]["rateA"] * abs.(lambda_f - lambda_t))
+                Impact[i] = som
+            end
+        end
+        
+    end
+    filename = "Impact_North.xlsx"
+
+        # Open een nieuw Excel-bestand en schrijf de vector naar de eerste kolom
+        XLSX.openxlsx(filename, mode="w") do xf
+            sheet = xf[1]  # Gebruik het eerste werkblad
+            sheet["A1"] = "Impact"  # Zet een kolomtitel
+            for i in 1:length(Impact)
+                sheet["A$(i+1)"] = Impact[i]  # Schrijf elk element onder elkaar
+            end
+        end
+    
+
+    #########################
+
 
 
     Impact = zeros(Float64, amount_cand)  # amount_cand

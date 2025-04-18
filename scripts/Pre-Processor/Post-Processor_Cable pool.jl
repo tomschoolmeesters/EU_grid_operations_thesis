@@ -11,7 +11,7 @@ for (i,branch) in result["solution"]["nw"]["1"]["ne_branch"]
     end
 end
 for (i,branch) in result["solution"]["nw"]["1"]["branchdc_ne"]
-    if branch["isbuilt"] == 1
+    if branch["isbuilt"] == 1 && i != "500205"
         nodal_input_ext["branchdc"]["$i"] = Dict{String,Any}()
         nodal_input_ext["branchdc"]["$i"] = zone_grid["branchdc_ne"]["$i"]
     end
