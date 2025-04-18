@@ -439,6 +439,7 @@ function pre_processor()
     final_indices = vcat(top_indices, random_indices)
     final_indices = unique(final_indices)
     =#
+    
 
     ImpactAC_sorted = ImpactAC[sortperm(ImpactAC[:, 2], rev = true), :]
     ImpactDC_sorted = ImpactDC[sortperm(ImpactDC[:, 2], rev = true), :]
