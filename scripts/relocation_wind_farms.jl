@@ -59,7 +59,7 @@ function add_OFF_DC_buses!(input_data)
         "FR" => 4,
         "NL" => 7,
         "NO1" => 1,
-        "UK" => 6)
+        "UK" => 8)
 
     new_DC_buses = Dict{String,Any}()
     for zone in keys(relocation_dict)
@@ -196,6 +196,7 @@ function update_input_data(input_data)
         input_data["convdc"]["$Conv_number"]["busac_i"] = AC_number
         input_data["convdc"]["$Conv_number"]["index"] = Conv_number 
         input_data["convdc"]["$Conv_number"]["source_id"][2] = Conv_number
+        input_data["convdc"]["$Conv_number"]["interconnector"] = false
         #input_data["convdc"]["$Conv_number"]["Pacmax"] = 40
         #input_data["convdc"]["$Conv_number"]["Qacrated"] = 40
         #input_data["convdc"]["$Conv_number"]["Pacrated"] = 40
@@ -232,9 +233,11 @@ function update_input_data(input_data)
             input_data["branch"]["$ACbranch_number"]["source_id"][2] = ACbranch_number
             input_data["branch"]["$ACbranch_number"]["f_bus"] = new_gen_bus
             input_data["branch"]["$ACbranch_number"]["t_bus"] = DC_to_ACbus
-            input_data["branch"]["$ACbranch_number"]["rate_a"] = 49
-            input_data["branch"]["$ACbranch_number"]["rate_b"] = 49
-            input_data["branch"]["$ACbranch_number"]["rate_c"] = 49
+            input_data["branch"]["$ACbranch_number"]["name"] = "WindFarm connector"
+            input_data["branch"]["$ACbranch_number"]["rate_a"] = 101
+            input_data["branch"]["$ACbranch_number"]["rate_b"] = 101
+            input_data["branch"]["$ACbranch_number"]["rate_c"] = 101
+            input_data["branch"]["$ACbranch_number"]["br_x"] = 0.01
             input_data["branch"]["$ACbranch_number"]["index"] = ACbranch_number
             input_data["branch"]["$ACbranch_number"]["interconnector"] = false
             input_data["branch"]["$ACbranch_number"]["transformer"] = false
@@ -245,6 +248,11 @@ function update_input_data(input_data)
                 old_gen_bus = relocation_dict["$zone"]["$g_id"]["old_gen_bus"] #AC bus
                 input_data["branch"]["$ACbranch_number"] = deepcopy(reference_acbranch)
                 input_data["branch"]["$ACbranch_number"]["source_id"][2] = ACbranch_number
+                input_data["branch"]["$ACbranch_number"]["name"] = "WindFarm connector"
+                input_data["branch"]["$ACbranch_number"]["rate_a"] = 101
+                input_data["branch"]["$ACbranch_number"]["rate_b"] = 101
+                input_data["branch"]["$ACbranch_number"]["rate_c"] = 101
+                input_data["branch"]["$ACbranch_number"]["br_x"] = 0.01
                 input_data["branch"]["$ACbranch_number"]["f_bus"] = DC_to_ACbus
                 input_data["branch"]["$ACbranch_number"]["t_bus"] = old_gen_bus
                 input_data["branch"]["$ACbranch_number"]["index"] = ACbranch_number
@@ -367,3 +375,8 @@ function add_VOLL_generation(EU_grid)
     end
     return EU_grid
 end
+
+
+            
+
+

@@ -178,6 +178,156 @@ function plot_grid(data, file_name; ac_only = false, color_branches = false, flo
     
 end
 
+function plot_branches(data, cluster,file_name; ac_only = false, color_branches = false, flows_ac = nothing, flows_dc = nothing, maximum_flows = false, plot_node_numbers_ac = false, plot_node_numbers_dc = false)
+    # Creating a series of vectors to be added to a DataFrame dictionary
+    # AC Buses (type 0) and DC Buses (type 1)
+    nodes = []
+    lat = []
+    lon = []
+    type = []
+    for (b_id,b) in data["bus"]
+        push!(nodes,b["index"])
+        push!(lat,b["lat"])
+        push!(lon,b["lon"])
+        push!(type,0)
+    end
+    
+    
+    for (c, conv) in data["convdc"]
+        bus_ac = conv["busac_i"]
+        bus_dc = conv["busdc_i"]
+    
+        data["busdc"]["$bus_dc"]["lat"] = data["bus"]["$bus_ac"]["lat"]
+        data["busdc"]["$bus_dc"]["lon"] = data["bus"]["$bus_ac"]["lon"]
+    end
+     
+    for (b_id,b) in data["busdc"]
+        push!(nodes, b["index"])
+        push!(lat, b["lat"])
+        push!(lon, b["lon"])
+        push!(type, 1)
+    end
+     
+    # Creating a series of vectors to be added to a DataFrame dictionary
+    # AC Branches (type 0) and DC Branches (type 1)
+     
+    branches = []
+    branches_ne = []
+    lat_fr = []
+    lon_fr = []
+    lat_to = []
+    lon_to = []
+    bus_fr = []
+    bus_to = []
+    bus_fr_ = []
+    bus_to_ = []
+    type_ = []
+    overload = []
+
+    AC_indices = []
+    DC_indices = []
+    for idx in cluster
+        if idx <= length(ne_branch)
+            AC_index = idx + 200000 -1
+            push!(AC_indices, AC_index)
+        end
+        if idx > length(ne_branch)
+            DC_index = idx + 500000 - length(ne_branch) - 1
+            push!(DC_indices,DC_index)
+        end
+    end
+
+     
+    for b in AC_indices
+        branch = data["ne_branch"]["$b"]
+        bus_fr = data["ne_branch"]["$b"]["f_bus"]
+        bus_to = data["ne_branch"]["$b"]["t_bus"]
+        if haskey(data["bus"], "$bus_fr") && haskey(data["bus"], "$bus_to")
+            push!(branches, data["ne_branch"]["$b"]["index"])
+            push!(bus_fr_,deepcopy(data["ne_branch"]["$b"]["f_bus"]))
+            push!(bus_to_,deepcopy(data["ne_branch"]["$b"]["t_bus"]))
+            push!(lat_fr,data["bus"]["$bus_fr"]["lat"])
+            push!(lon_fr,data["bus"]["$bus_fr"]["lon"])
+            push!(lat_to,data["bus"]["$bus_to"]["lat"])
+            push!(lon_to,data["bus"]["$bus_to"]["lon"])
+            push!(type_,2)
+        end
+    end
+    for b in DC_indices
+        bus_fr = data["branchdc_ne"]["$b"]["fbusdc"]
+        bus_to = data["branchdc_ne"]["$b"]["tbusdc"]
+        if haskey(data["busdc"], "$bus_fr") && haskey(data["busdc"], "$bus_to")
+            push!(bus_fr_,data["branchdc_ne"]["$b"]["fbusdc"])
+            push!(bus_to_,data["branchdc_ne"]["$b"]["tbusdc"])
+            push!(branches, data["branchdc_ne"]["$b"]["index"])
+            push!(lat_fr,data["busdc"]["$bus_fr"]["lat"])
+            push!(lon_fr,data["busdc"]["$bus_fr"]["lon"])
+            push!(lat_to,data["busdc"]["$bus_to"]["lat"])
+            push!(lon_to,data["busdc"]["$bus_to"]["lon"])
+            push!(type_,3)
+        end
+        
+    end
+
+    dict_nodes = DataFrames.DataFrame("node"=>nodes,"lat"=>lat,"lon"=>lon, "type"=> type)
+    map_ = DataFrames.DataFrame("from"=>bus_fr_,"to"=>bus_to_,"lat_fr"=>lat_fr,"lon_fr"=>lon_fr,"lat_to"=>lat_to,"lon_to"=>lon_to,"type"=>type_, "branch" => branches)
+    txt_x=1
+
+    ac_buses=filter(:type => ==(0), dict_nodes)       
+    markerAC = PlotlyJS.attr(size=[txt_x],
+                color="green")
+     
+    dc_buses=filter(:type => ==(1), dict_nodes)       
+    markerDC = PlotlyJS.attr(size=[txt_x],
+                color="blue")
+
+     #AC buses legend
+     traceAC = [PlotlyJS.scattergeo(;mode="markers",
+     lat=[row[:lat]],lon=[row[:lon]],
+     marker=markerAC)  for row in eachrow(ac_buses)]
+
+     #DC buses legend
+     traceDC = [PlotlyJS.scattergeo(;mode="markers",
+     lat=[row[:lat]],lon=[row[:lon]],
+     marker=markerDC)  for row in eachrow(dc_buses)]
+
+     #DC line display
+     lineDC = PlotlyJS.attr(width=1*txt_x,color="red")
+     
+     
+     #AC line display
+     lineAC = PlotlyJS.attr(width=1*txt_x,color="navy")#,dash="dash")
+     
+     
+     #AC line legend
+     trace_AC=[PlotlyJS.scattergeo(;mode="lines",
+     lat=[row.lat_fr,row.lat_to],
+     lon=[row.lon_fr,row.lon_to],
+     line = lineAC)
+     for row in eachrow(map_) if (row[:type]==2)]
+
+
+     trace_DC=[PlotlyJS.scattergeo(;mode="lines",
+     lat=[row.lat_fr,row.lat_to],
+     lon=[row.lon_fr,row.lon_to],
+     #opacity = row.overload,
+     line = lineDC)
+     for row in eachrow(map_) if (row[:type]==3)]
+
+    trace=vcat(trace_AC, trace_DC, traceDC, traceAC) # both AC Branches and buses, DC Branches and buses
+    #set map location
+    geo = PlotlyJS.attr(fitbounds="locations")
+     
+    #plot layput
+    layout = PlotlyJS.Layout(geo = geo, geo_resolution = 50, width = 1000, height = 1100,
+    showlegend = false,
+    margin=PlotlyJS.attr(l=0, r=0, t=0, b=0))
+    PlotlyJS.plot(trace, layout) # print figure
+    PlotlyJS.savefig(PlotlyJS.plot(trace, layout), file_name)
+    
+
+end
+
 function plot_grid_tnep(data, file_name; ac_only = false, color_branches = false, flows_ac = nothing, flows_dc = nothing, maximum_flows = false, plot_node_numbers_ac = false, plot_node_numbers_dc = false)
     # Creating a series of vectors to be added to a DataFrame dictionary
     # AC Buses (type 0) and DC Buses (type 1)
@@ -856,3 +1006,4 @@ function plot_average_zonal_costs(result, input_data, file_name; zones = nothing
     Plots.ylabel!("Average cost of generation € / MWh")
     Plots.savefig(p, file_name)
 end
+   

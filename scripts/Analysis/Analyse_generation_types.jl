@@ -63,7 +63,7 @@ function Analyse_generation_types(hour_range,start_hour)
             generation_per_type = Vector{Float64}()
             for hour in hour_range
                 hourly_generation = 0
-                for (g_idx,gen) in nodal_result["2000"]["solution"]["gen"]
+                for (g_idx,gen) in nodal_result["1"]["solution"]["gen"]
                     if nodal_input["gen"]["$g_idx"]["type"] == type
                         hourly_generation += nodal_result["$hour"]["solution"]["gen"][g_idx]["pg"]*100
                     end

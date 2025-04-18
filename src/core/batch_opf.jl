@@ -10,6 +10,18 @@ function batch_opf(hour_start_idx, hour_end_idx, zone_grid, timeseries_data, sol
     return result
 end
 
+function batch_opf_repr(hour_start_idx, hour_end_idx,zone_grid, timeseries_data_reduced, factor, solver, setting)
+    zone_grid_hourly = deepcopy(zone_grid)
+    result = Dict{String, Any}(["$hour" => Dict{String, Any}() for hour in hour_start_idx : hour_end_idx])
+    for hour_idx in hour_start_idx : hour_end_idx
+        hourly_grid_data!(zone_grid_hourly, zone_grid, hour_idx, timeseries_data_reduced) # write hourly values into the grid data
+        result["$hour_idx"] = CbaOPF.solve_cbaopf(zone_grid_hourly, _PM.DCPPowerModel, solver; setting = setting) # solve the OPF 
+        result["$hour_idx"]["objective"] = result["$hour_idx"]["objective"]*factor[hour_idx]
+    end 
+    
+    return result
+end
+
 function batch_opf_test(hour_start_idx, hour_end_idx, zone_grid, timeseries_data, solver, setting)
     zone_grid_hourly = deepcopy(zone_grid)
     result = Dict{String, Any}(["$hour" => Dict{String, Any}() for hour in hour_start_idx : hour_end_idx])

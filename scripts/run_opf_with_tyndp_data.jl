@@ -33,7 +33,7 @@ load_data = true
 use_case = "North_Sea_reloc"
 hour_start = 1
 hour_end = 200
-isolated_zones = ["BE","NL"]#,"UK","DE","NL"]#["BE","FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]
+isolated_zones = ["BE","NL","UK","DE","DK1","DK2"]#,"UK","DE","NL"]#["BE","FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]
 relocate_wind = true
 update_conv = true
 add_VOLL = true
@@ -85,19 +85,15 @@ _EUGO.scale_generation!(tyndp_capacity, EU_grid, scenario_id, climate_year, zone
 # _EUGO.isolate_zones(EU_grid, ["DE"]; border_slack = x), this will leas to (1-slack)*xb_flow_ref < xb_flow < (1+slack)*xb_flow_ref
 zone_grid = _EUGO.isolate_zones(EU_grid, isolated_zones, border_slack = 0.03) #you allow a 1% slack compared to the power flows computed through the zonal model, which might leave a bit more freedom to the optimizer compared to a strict equality constraint on the flow
 
-for (g,gen) in zone_grid["gen"]
-  if parse(Int,g) >= 100000 && gen["type_tyndp"] == "XB_dummy"
-    delete!(zone_grid["gen"], g)
-  end
-end
 
+#for (l, load) in zone_grid["load"]
+#  load["pred_rel_max"] = 0
+#  load["cost_red"] = 10e5 * zone_grid["baseMVA"]
+#  load["cost_curt"] = 10e5 * zone_grid["baseMVA"]
+#  load["flex"] = 1
+#end
 
-for (l, load) in zone_grid["load"]
-  load["pred_rel_max"] = 0
-  load["cost_red"] = 10e5 * zone_grid["baseMVA"]
-  load["cost_curt"] = 10e5 * zone_grid["baseMVA"]
-  load["flex"] = 1
-end
+gen_costs["Offshore Wind"] = 17
 
 for (g_id,g) in zone_grid["gen"]
   
@@ -107,6 +103,7 @@ for (g_id,g) in zone_grid["gen"]
     g["cost"][1] = 0
   end   
 end
+
 # create RES time series based on the TYNDP model for 
 # (1) all zones, e.g.  create_res_time_series(wind_onshore, wind_offshore, pv, zone_mapping) 
 # (2) a specified zone, e.g. create_res_time_series(wind_onshore, wind_offshore, pv, zone_mapping; zone = "DE")
@@ -114,9 +111,13 @@ timeseries_data = _EUGO.create_res_and_demand_time_series(wind_onshore, wind_off
 
 push!(timeseries_data, "xb_flows" => _EUGO.get_xb_flows(zone_grid, zonal_result, zonal_input, zone_mapping)) 
 
+################################
+### Full timestep simulation ###
+################################
+
 # Start runnning hourly OPF calculations
 hour_start_idx = 2000
-hour_end_idx = 2144
+hour_end_idx = 2072
 
 plot_filename = joinpath("results", join(["grid_input_",use_case,".pdf"]))
 _EUGO.plot_grid(zone_grid, plot_filename)
@@ -130,6 +131,27 @@ result = _EUGO.batch_opf(hour_start_idx, hour_end_idx, zone_grid, timeseries_dat
 # An alternative is to run it in chuncks of "batch_size", which will store the results as json files, e.g. hour_1_to_batch_size, ....
 batch_size = 24
 _EUGO.batch_opf(hour_start_idx, hour_end_idx, zone_grid, timeseries_data, gurobi, s_dual, batch_size, output_file_name)
+
+
+##########################################
+### Representative timestep simulation ###
+##########################################
+# Create reduced timeseries_data
+
+
+
+# This function will create a dictionary with all hours as result but with representative timesteps
+hour_start_idx = 1
+hour_end_idx = 24
+
+result = _EUGO.batch_opf_repr(hour_start_idx, hour_end_idx,zone_grid, timeseries_data_reduced, factor, gurobi, s_dual)
+  
+
+
+
+##############################
+### Saving results as json ###
+##############################
 
 result_file_name = joinpath(_EUGO.BASE_DIR, "results","OPF_NorthSEA", "TYNDP"*tyndp_version, join(["result_nodal_tyndp_", scenario*year,"_", climate_year, ".json"]))
 number_of_hours = hour_end_idx - hour_start_idx + 1
@@ -173,51 +195,3 @@ open(scenario_file_name,"w") do f
   JSON.print(f, json_string)
 end
 
-#=
-#Generate some Plots
-number_of_hours = 168
-gen = []
-for i in 1:number_of_hours
-    if !isnan(result["$i"]["objective"])
-    push!(gen,result["$i"]["solution"]["gen"]["3038"]["pg"])
-    end
-end
-gen_2 = []
-for i in 1:number_of_hours
-    if !isnan(result["$i"]["objective"])
-    push!(gen_2,result["$i"]["solution"]["gen"]["5711"]["pg"])
-    end
-end
-
-plot(gen)
-plot!(gen_2)
-=#
-
-for (g,gen) in zone_grid["gen"]
-	if gen["type_tyndp"] == "Offshore Wind"
-		windfarms["$g"] = Dict()
-		zone = gen["zone"]
-		gen_bus = gen["gen_bus"]
-		lat = zone_grid["bus"]["$gen_bus"]["lat"]
-		lon = zone_grid["bus"]["$gen_bus"]["lon"]
-		windfarms["$g"]["zone"] = zone
-    windfarms["$g"]["gen_bus"] = gen_bus
-		windfarms["$g"]["lat"] = lat
-		windfarms["$g"]["lon"] = lon
-    windfarms["$g"]["pmax"] = gen["pmax"]*100
-	end
-end
-ids = collect(keys(windfarms))
-
-# Functie om een waarde veilig op te halen
-getval(d, key) = get(d, key, missing)
-
-# DataFrame maken
-df = DataFrame(
-    id = ids,
-    lat = [getval(windfarms[k], "lat") for k in ids],
-    lon = [getval(windfarms[k], "lon") for k in ids],
-    zone = [getval(windfarms[k], "zone") for k in ids],
-    gen_bus = [getval(windfarms[k], "gen_bus") for k in ids],
-    p_max = [getval(windfarms[k], "pmax") for k in ids]
-)

@@ -34,17 +34,18 @@ function Analyse_branch(b,start_hour,planning_year)
 
     Power = zeros(length(nodal_result))
     for i in keys(nodal_result)
-        if nodal_result["$i"]["termination_status"] == "OPTIMAL"
+        idx = parse(Int,i) - start_hour + 1
+        #if nodal_result["$i"]["termination_status"] == "OPTIMAL"
 
             if "$b" in keys(nodal_input["branchdc"]) #KEY = BRANCHDC
                 
-                Power[parse(Int,i)] = abs(nodal_result["$i"]["solution"]["branchdc"]["$b"]["pt"])*100
+                Power[idx] = abs(nodal_result["$i"]["solution"]["branchdc"]["$b"]["pt"])*100
 
             else
-                Power[parse(Int,i)] = abs(nodal_result["$i"]["solution"]["branch"]["$b"]["pt"])*100
+                Power[idx] = abs(nodal_result["$i"]["solution"]["branch"]["$b"]["pt"])*100
             
             end
-        end
+       # end
     end     
 
     P5 = Plots.plot()
