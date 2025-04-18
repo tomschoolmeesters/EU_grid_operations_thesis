@@ -31,6 +31,10 @@ function scale_generation!(tyndp_capacity, grid_data, scenario, climate_year, zo
             end
         end
 
+        if type == "Offshore Wind" 
+            zonal_tyndp_capacity = zonal_tyndp_capacity * 3
+        end
+
         # If the zonal capacity is different than zero, scale "pmax" based on the ratios of the zonal capacities
         if zonal_tyndp_capacity !=0
             for (z, zone_) in grid_data["zonal_generation_capacity"]
