@@ -32,7 +32,7 @@ climate_year = "1984"
 load_data = true
 use_case = "North_Sea_reloc"
 hour_start = 1
-hour_end = 200
+hour_end = 8760
 isolated_zones = ["BE","NL","UK","DE","DK1","DK2"]#,"UK","DE","NL"]#["BE","FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]
 relocate_wind = true
 update_conv = true
@@ -79,7 +79,7 @@ zone_mapping = _EUGO.map_zones()
 
 # Scale generation capacity based on TYNDP data
 scenario_id = "$scenario$year"
-_EUGO.scale_generation!(tyndp_capacity, EU_grid, scenario_id, climate_year, zone_mapping)
+scale_generation!(tyndp_capacity, EU_grid, scenario_id, climate_year, zone_mapping)
 
 # Isolate zone: input is vector of strings, if you need to relax the fixing border flow assumptions use:
 # _EUGO.isolate_zones(EU_grid, ["DE"]; border_slack = x), this will leas to (1-slack)*xb_flow_ref < xb_flow < (1+slack)*xb_flow_ref
@@ -93,7 +93,6 @@ zone_grid = _EUGO.isolate_zones(EU_grid, isolated_zones, border_slack = 0.03) #y
 #  load["flex"] = 1
 #end
 
-gen_costs["Offshore Wind"] = 17
 
 gen_costs["Offshore Wind"] = 17
 
@@ -140,12 +139,15 @@ _EUGO.batch_opf(hour_start_idx, hour_end_idx, zone_grid, timeseries_data, gurobi
 ### Representative timestep simulation ###
 ##########################################
 # Create reduced timeseries_data
-
-
+option = 3 # 1: all zones, 2: all zones without demand, 3: all zones without demand and offshore wind, 4: all zones without demand and offshore wind and onshore wind
+timeseries_data_reduced, factor = get_reduced_timeseries(timeseries_data,option)
 
 # This function will create a dictionary with all hours as result but with representative timesteps
 hour_start_idx = 1
-hour_end_idx = 24
+hour_end_idx = 48
+
+s_dual = Dict("output" => Dict("branch_flows" => true,"duals" => true), "conv_losses_mp" => true,"fix_cross_border_flows" => true)
+
 
 result = _EUGO.batch_opf_repr(hour_start_idx, hour_end_idx,zone_grid, timeseries_data_reduced, factor, gurobi, s_dual)
   

@@ -4,7 +4,7 @@ function min_max_scale(X)
     return (X .- min_vals) ./ (max_vals .- min_vals)
 end
 
-function get_reduced_timeseries(timeseries_data)
+function get_reduced_timeseries(timeseries_data,option)
 
     solar_pv_BE = timeseries_data["solar_pv"]["BE"]
     solar_pv_NL = timeseries_data["solar_pv"]["NL"]
@@ -90,14 +90,15 @@ function get_reduced_timeseries(timeseries_data)
                     XB_flow_FR_N)'
 
     elseif option == 3
-        data = hcat(demand_N, solar_pv_N, offshore_N, onshore_N)'
+        data = hcat(demand_N, solar_pv_N, offshore_N, onshore_N, XB_flow_FR_N)'
     
     elseif option == 4
-        data = hcat(demand_N, renewables_N)'
+        data = hcat(demand_N, renewables_N, XB_flow_FR_N)'
     end
 
     # Run k-means clustering voor de gecombineerde gegevens (vraag + de drie hernieuwbare bronnen)
-    result = kmeans(data, 24)
+    amount_of_clusters = 48
+    result = kmeans(data, amount_of_clusters)
 
 
     ################
@@ -129,10 +130,10 @@ function get_reduced_timeseries(timeseries_data)
     println(centroids)
 
     # Aantal datapunten per cluster
-    num_points_per_cluster = zeros(Int, 24)
+    num_points_per_cluster = zeros(Int, amount_of_clusters)
 
     # Tel het aantal datapunten per cluster
-    for cluster_id in 1:24
+    for cluster_id in 1:amount_of_clusters
         num_points_per_cluster[cluster_id] = sum(result.assignments .== cluster_id)
     end
 
@@ -189,9 +190,83 @@ function get_reduced_timeseries(timeseries_data)
         timeseries_data_reduced["wind_offshore"]["DE"] = centroids[9,:] .* (maxs[24] .- mins[24]) .+ mins[24]
 
         for zone in keys(timeseries_data_reduced["xb_flows"])
-            timeseries_data_reduced["xb_flows"]["$zone"]["flow"] = zeros(1,24)
+            timeseries_data_reduced["xb_flows"]["$zone"]["flow"] = zeros(1,amount_of_clusters)
         end
         timeseries_data_reduced["xb_flows"]["FR"]["flow"] = (centroids[10,:] .* (maxs[25] .- mins[25]) .+ mins[25])'
+    
+    elseif option == 3
+        timeseries_data_reduced["demand"]["BE"] = centroids[1,:] .* (maxs[1] .- mins[1]) .+ mins[1]
+        timeseries_data_reduced["demand"]["UK"] = centroids[1,:] .* (maxs[2] .- mins[2]) .+ mins[2]
+        timeseries_data_reduced["demand"]["DK2"] = centroids[1,:] .* (maxs[3] .- mins[3]) .+ mins[3]
+        timeseries_data_reduced["demand"]["DK1"] = centroids[1,:] .* (maxs[4] .- mins[4]) .+ mins[4]
+        timeseries_data_reduced["demand"]["NL"] = centroids[1,:] .* (maxs[5] .- mins[5]) .+ mins[5]
+        timeseries_data_reduced["demand"]["DE"] = centroids[1,:] .* (maxs[6] .- mins[6]) .+ mins[6]
+
+        timeseries_data_reduced["wind_onshore"]["BE"] = centroids[4,:] .* (maxs[7] .- mins[7]) .+ mins[7]
+        timeseries_data_reduced["wind_onshore"]["UK"] = centroids[4,:] .* (maxs[8] .- mins[8]) .+ mins[8]
+        timeseries_data_reduced["wind_onshore"]["DK2"] = centroids[4,:] .* (maxs[9] .- mins[9]) .+ mins[9]
+        timeseries_data_reduced["wind_onshore"]["DK1"] = centroids[4,:] .* (maxs[10] .- mins[10]) .+ mins[10]
+        timeseries_data_reduced["wind_onshore"]["NL"] = centroids[4,:] .* (maxs[11] .- mins[11]) .+ mins[11]
+        timeseries_data_reduced["wind_onshore"]["DE"] = centroids[4,:] .* (maxs[12] .- mins[12]) .+ mins[12]
+
+        timeseries_data_reduced["solar_pv"]["BE"] = centroids[2,:] .* (maxs[13] .- mins[13]) .+ mins[13]
+        timeseries_data_reduced["solar_pv"]["UK"] = centroids[2,:] .* (maxs[14] .- mins[14]) .+ mins[14]
+        timeseries_data_reduced["solar_pv"]["DK2"] = centroids[2,:] .* (maxs[15] .- mins[15]) .+ mins[15]
+        timeseries_data_reduced["solar_pv"]["DK1"] = centroids[2,:] .* (maxs[16] .- mins[16]) .+ mins[16]
+        timeseries_data_reduced["solar_pv"]["NL"] = centroids[2,:] .* (maxs[17] .- mins[17]) .+ mins[17]
+        timeseries_data_reduced["solar_pv"]["DE"] = centroids[2,:] .* (maxs[18] .- mins[18]) .+ mins[18]
+
+        timeseries_data_reduced["wind_offshore"]["BE"] = centroids[3,:] .* (maxs[19] .- mins[19]) .+ mins[19]
+        timeseries_data_reduced["wind_offshore"]["UK"] = centroids[3,:] .* (maxs[20] .- mins[20]) .+ mins[20]
+        timeseries_data_reduced["wind_offshore"]["DK2"] = centroids[3,:] .* (maxs[21] .- mins[21]) .+ mins[21]
+        timeseries_data_reduced["wind_offshore"]["DK1"] = centroids[3,:] .* (maxs[22] .- mins[22]) .+ mins[22]
+        timeseries_data_reduced["wind_offshore"]["NL"] = centroids[3,:] .* (maxs[23] .- mins[23]) .+ mins[23]
+        timeseries_data_reduced["wind_offshore"]["DE"] = centroids[3,:] .* (maxs[24] .- mins[24]) .+ mins[24]
+
+
+
+        for zone in keys(timeseries_data_reduced["xb_flows"])
+            timeseries_data_reduced["xb_flows"]["$zone"]["flow"] = zeros(1,amount_of_clusters)
+        end
+        timeseries_data_reduced["xb_flows"]["FR"]["flow"] = (centroids[5,:] .* (maxs[25] .- mins[25]) .+ mins[25])'
+    
+    
+    
+    elseif option == 4
+        timeseries_data_reduced["demand"]["BE"] = centroids[1,:] .* (maxs[1] .- mins[1]) .+ mins[1]
+        timeseries_data_reduced["demand"]["UK"] = centroids[1,:] .* (maxs[2] .- mins[2]) .+ mins[2]
+        timeseries_data_reduced["demand"]["DK2"] = centroids[1,:] .* (maxs[3] .- mins[3]) .+ mins[3]
+        timeseries_data_reduced["demand"]["DK1"] = centroids[1,:] .* (maxs[4] .- mins[4]) .+ mins[4]
+        timeseries_data_reduced["demand"]["NL"] = centroids[1,:] .* (maxs[5] .- mins[5]) .+ mins[5]
+        timeseries_data_reduced["demand"]["DE"] = centroids[1,:] .* (maxs[6] .- mins[6]) .+ mins[6]
+
+        timeseries_data_reduced["wind_onshore"]["BE"] = centroids[2,:] .* (maxs[7] .- mins[7]) .+ mins[7]
+        timeseries_data_reduced["wind_onshore"]["UK"] = centroids[2,:] .* (maxs[8] .- mins[8]) .+ mins[8]
+        timeseries_data_reduced["wind_onshore"]["DK2"] = centroids[2,:] .* (maxs[9] .- mins[9]) .+ mins[9]
+        timeseries_data_reduced["wind_onshore"]["DK1"] = centroids[2,:] .* (maxs[10] .- mins[10]) .+ mins[10]
+        timeseries_data_reduced["wind_onshore"]["NL"] = centroids[2,:] .* (maxs[11] .- mins[11]) .+ mins[11]
+        timeseries_data_reduced["wind_onshore"]["DE"] = centroids[2,:] .* (maxs[12] .- mins[12]) .+ mins[12]
+
+        timeseries_data_reduced["solar_pv"]["BE"] = centroids[2,:] .* (maxs[13] .- mins[13]) .+ mins[13]
+        timeseries_data_reduced["solar_pv"]["UK"] = centroids[2,:] .* (maxs[14] .- mins[14]) .+ mins[14]
+        timeseries_data_reduced["solar_pv"]["DK2"] = centroids[2,:] .* (maxs[15] .- mins[15]) .+ mins[15]
+        timeseries_data_reduced["solar_pv"]["DK1"] = centroids[2,:] .* (maxs[16] .- mins[16]) .+ mins[16]
+        timeseries_data_reduced["solar_pv"]["NL"] = centroids[2,:] .* (maxs[17] .- mins[17]) .+ mins[17]
+        timeseries_data_reduced["solar_pv"]["DE"] = centroids[2,:] .* (maxs[18] .- mins[18]) .+ mins[18]
+
+        timeseries_data_reduced["wind_offshore"]["BE"] = centroids[2,:] .* (maxs[19] .- mins[19]) .+ mins[19]
+        timeseries_data_reduced["wind_offshore"]["UK"] = centroids[2,:] .* (maxs[20] .- mins[20]) .+ mins[20]
+        timeseries_data_reduced["wind_offshore"]["DK2"] = centroids[2,:] .* (maxs[21] .- mins[21]) .+ mins[21]
+        timeseries_data_reduced["wind_offshore"]["DK1"] = centroids[2,:] .* (maxs[22] .- mins[22]) .+ mins[22]
+        timeseries_data_reduced["wind_offshore"]["NL"] = centroids[2,:] .* (maxs[23] .- mins[23]) .+ mins[23]
+        timeseries_data_reduced["wind_offshore"]["DE"] = centroids[2,:] .* (maxs[24] .- mins[24]) .+ mins[24]
+
+
+
+        for zone in keys(timeseries_data_reduced["xb_flows"])
+            timeseries_data_reduced["xb_flows"]["$zone"]["flow"] = zeros(1,amount_of_clusters)
+        end
+        timeseries_data_reduced["xb_flows"]["FR"]["flow"] = (centroids[3,:] .* (maxs[25] .- mins[25]) .+ mins[25])'
     
     else
         println("Option is not yet fully defined")

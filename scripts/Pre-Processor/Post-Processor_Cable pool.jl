@@ -39,7 +39,7 @@ result_OPF = _EUGO.batch_opf(hour_start_idx, hour_end_idx, nodal_input_ext, time
 ##########################################
 
 hour_start_idx = 1
-hour_end_idx = 24
+hour_end_idx = 48
 
 plot_filename = joinpath("results", join(["grid_input_",use_case,".pdf"]))
 _EUGO.plot_grid(nodal_input_ext, plot_filename)
@@ -55,7 +55,7 @@ result_OPF = _EUGO.batch_opf_repr(hour_start_idx, hour_end_idx,zone_grid, timese
 ### Calculate total objective ###
 #################################
 Total_objective = 0
-for (i,solution) in result_OPF
+for (i,solution) in nodal_result
     objective = solution["objective"]
     Total_objective += objective
 end

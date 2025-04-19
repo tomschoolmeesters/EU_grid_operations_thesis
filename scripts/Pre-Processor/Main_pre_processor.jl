@@ -2,6 +2,7 @@ using Distances
 using DataStructures
 using MultivariateStats
 using StatsBase
+using LinearAlgebra
 
 
 function winsorize_matrix!(matrix, lower_pct, upper_pct)
@@ -107,6 +108,9 @@ function PTDF_analysis_full(nodal_input,nodal_result,number_of_hours,ne_branch,n
 
     return Impact_matrix   
 end
+
+
+
 
 
 
@@ -225,7 +229,7 @@ function pre_processor()
     ### Create Excel file voor resultaten ###
     #########################################
 
-    filename = "Impact_North_DC.xlsx"
+    filename = "Impact_North_AC.xlsx"
     headers = ["Index", "Impact Sum"]
 
         # Open een nieuw Excel-bestand en schrijf de vector naar de eerste kolom
@@ -233,9 +237,9 @@ function pre_processor()
             sheet = xf[1]
             sheet[1, 1] = headers[1]
             sheet[1, 2] = headers[2]
-            for i in 1:size(ImpactDC, 1)
-                sheet[i+1, 1] = ImpactDC[i, 1]
-                sheet[i+1, 2] = ImpactDC[i, 2]
+            for i in 1:size(ImpactAC, 1)
+                sheet[i+1, 1] = ImpactAC[i, 1]
+                sheet[i+1, 2] = ImpactAC[i, 2]
             end
         end
  
@@ -439,18 +443,18 @@ function pre_processor()
     final_indices = vcat(top_indices, random_indices)
     final_indices = unique(final_indices)
     =#
-    
+
 
     ImpactAC_sorted = ImpactAC[sortperm(ImpactAC[:, 2], rev = true), :]
     ImpactDC_sorted = ImpactDC[sortperm(ImpactDC[:, 2], rev = true), :]
-    n_topAC = ceil(Int, 0.015 * size(ImpactAC_sorted, 1))  # aantal bovenste elementen
-    n_topDC = ceil(Int, 0.6 * size(ImpactDC_sorted, 1))
+    n_topAC = ceil(Int, 0.003 * size(ImpactAC_sorted, 1))  # aantal bovenste elementen
+    n_topDC = ceil(Int, 0.5 * size(ImpactDC_sorted, 1))
     top_indicesAC = ImpactAC_sorted[1:n_topAC, 1] 
     top_indicesDC = ImpactDC_sorted[1:n_topDC, 1] 
     
-    random_indices = rand(Impact_sorted[:,1], 100)
+    random_indices = rand(ImpactAC_sorted[:,1], 20)
 
-    final_indices = vcat(top_indicesAC, top_indicesDC)  # VOEG EVENTUEEL RANDOM INDICES TOE OM TE CHECKEN
+    final_indices = vcat(top_indicesAC, top_indicesDC,random_indices)  # VOEG EVENTUEEL RANDOM INDICES TOE OM TE CHECKEN
     final_indices = unique(final_indices)
 
 

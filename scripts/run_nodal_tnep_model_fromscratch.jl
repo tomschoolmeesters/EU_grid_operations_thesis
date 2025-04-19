@@ -52,11 +52,11 @@ s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => true, "fi
 ### Representative timestep simulation ###
 ##########################################
 
-hours = 1:24
+hours = 1:48
 # Create dictionary for writing out results
 print("######################################", "\n")
 print("####### PREPARING DATA      ##########", "\n")
-@time mn_input_data = prepare_mn_data_nodal(zone_grid, EU_grid,timeseries_data_reduced, hours)
+@time mn_input_data = _EUGO.prepare_mn_data_nodal(zone_grid, EU_grid,timeseries_data_reduced, hours)
 
 print("######################################", "\n")
 print("####### STARTING OPTIMISATION ########", "\n")
@@ -65,11 +65,11 @@ gurobi = JuMP.optimizer_with_attributes(
     Gurobi.Optimizer,
     "MIPGap" => 0.05,
     "DualReductions"  => 0,
-    "FeasibilityTol" => 1e-6)         # Stop als de gap kleiner is dan 0.01
+    "FeasibilityTol" => 1e-6)         # Stop als de gap kleiner is dan 0.05
 
 
 s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => true, "fix_cross_border_flows" => true, "process_data_internally" => true)
-@time result = _PMACDC.run_mp_tnepopf(mn_input_data,_PM.DCPPowerModel, gurobi, multinetwork = true; setting = s)
+@time result = _PMACDC.run_mp_tnepopf_repr(mn_input_data,_PM.DCPPowerModel, gurobi, multinetwork = true; setting = s)
 
 
 #############################
