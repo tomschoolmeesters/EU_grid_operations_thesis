@@ -178,7 +178,7 @@ function plot_grid(data, file_name; ac_only = false, color_branches = false, flo
     
 end
 
-function plot_branches(data, cluster,file_name; ac_only = false, color_branches = false, flows_ac = nothing, flows_dc = nothing, maximum_flows = false, plot_node_numbers_ac = false, plot_node_numbers_dc = false)
+function plot_branches(data, cluster,file_name; clusters = false, ac_only = false, color_branches = false, flows_ac = nothing, flows_dc = nothing, maximum_flows = false, plot_node_numbers_ac = false, plot_node_numbers_dc = false)
     # Creating a series of vectors to be added to a DataFrame dictionary
     # AC Buses (type 0) and DC Buses (type 1)
     nodes = []
@@ -226,14 +226,26 @@ function plot_branches(data, cluster,file_name; ac_only = false, color_branches 
 
     AC_indices = []
     DC_indices = []
-    for idx in cluster
-        if idx <= length(ne_branch)
-            AC_index = idx + 200000 -1
-            push!(AC_indices, AC_index)
+    if clusters
+        for idx in cluster
+            if idx <= length(ne_branch)
+                AC_index = idx + 200000 -1
+                push!(AC_indices, AC_index)
+            end
+            if idx > length(ne_branch)
+                DC_index = idx + 500000 - length(ne_branch) - 1
+                push!(DC_indices,DC_index)
+            end
         end
-        if idx > length(ne_branch)
-            DC_index = idx + 500000 - length(ne_branch) - 1
-            push!(DC_indices,DC_index)
+    else
+        for idx in cluster
+            if idx < 500000
+                AC_index = idx
+                push!(AC_indices, AC_index)
+            else
+                DC_index = idx
+                push!(DC_indices,DC_index)
+            end
         end
     end
 
@@ -328,7 +340,7 @@ function plot_branches(data, cluster,file_name; ac_only = false, color_branches 
 
 end
 
-function plot_grid_tnep(data, file_name; ac_only = false, color_branches = false, flows_ac = nothing, flows_dc = nothing, maximum_flows = false, plot_node_numbers_ac = false, plot_node_numbers_dc = false)
+function plot_grid_tnep(data, file_name,result; ac_only = false, color_branches = false, flows_ac = nothing, flows_dc = nothing, maximum_flows = false, plot_node_numbers_ac = false, plot_node_numbers_dc = false)
     # Creating a series of vectors to be added to a DataFrame dictionary
     # AC Buses (type 0) and DC Buses (type 1)
     nodes = []

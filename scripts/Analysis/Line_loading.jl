@@ -44,11 +44,11 @@ function mean_Loadfactor(nodal_input,hour_range)
         if nodal_input["branch"]["$line_ac"]["type"] == "AC line"
             load_factors = Float64[]
             max_rating = nodal_input["branch"]["$line_ac"]["rate_a"]*100 #MW
-            max_elec_rating = (nodal_input["branch"]["$l_ac"]["angmax"]/nodal_input["branch"]["$l_ac"]["br_x"]) *100 #MW
+            max_elec_rating = (nodal_input["branch"]["$line_ac"]["angmax"]/nodal_input["branch"]["$line_ac"]["br_x"]) *100 #MW
             
             for i in hour_range
-                load_factor_therm_i = (abs(nodal_result["$i"]["solution"]["branch"][line_ac]["pt"]) * 100)/max_rating
-                load_factor_elec_i = abs(nodal_result["$i"]["solution"]["branch"]["$l_ac"]["pt"]*100)/max_elec_rating
+                load_factor_therm_i = (abs(nodal_result["$i"]["solution"]["branch"]["$line_ac"]["pt"]) * 100)/max_rating
+                load_factor_elec_i = abs(nodal_result["$i"]["solution"]["branch"]["$line_ac"]["pt"]*100)/max_elec_rating
                 push!(load_factors, minimum([load_factor_therm_i, load_factor_elec_i]))
             end
             Loading[parse(Int,line_ac)] = mean(load_factors)
@@ -181,7 +181,7 @@ function plot_loaded_grid(
     maximum_flows = false, 
     plot_node_numbers_ac = false, 
     plot_node_numbers_dc = false, 
-    line_loadings = mean_Loadfactor(nodal_input,[1559]))
+    line_loadings = mean_Loadfactor(nodal_input,[37]))
 
     #using PlotlyJS, ColorSchemes, DataFrames
 
