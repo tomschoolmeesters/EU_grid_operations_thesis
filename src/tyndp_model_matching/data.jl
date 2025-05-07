@@ -105,7 +105,15 @@ function construct_data_dictionary_2020(ntcs, capacity, nodes, demand, scenario,
     return data, nodal_data
 end
    
-function construct_data_dictionary_2024(ntcs, arcs, capacity, nodes, demand, scenario, climate_year, gen_types, pv, wind_onshore, wind_offshore, gen_costs, emission_factor, inertia_constants, node_positions; co2_cost = 0.0)
+function construct_data_dictionary_2024(ntcs, arcs, capacity, nodes, demand, scenario_id, climate_year, gen_types, pv, wind_onshore, wind_offshore, gen_costs, emission_factor, inertia_constants, node_positions; co2_cost = 0.0)
+    scenario = scenario_id[1:2]
+    year = scenario_id[3:end]
+
+    file_data = joinpath(BASE_DIR,"data_sources", "TYNDP2024","250117_TYNDP2024Scenarios_Electricity_SupplyMix.xlsx")
+    capacity_ = XLSX.readtable(file_data,"250117_TYNDP2024Scenarios_Elect")
+    capacity_data = _DF.DataFrame(Year = capacity_[1][1], Scenario = capacity_[1][2], Category_Simple= capacity_[1][3], Category_Detail = capacity_[1][4], Value = capacity_[1][5], 
+    Country = capacity_[1][6], Climate_Year = capacity_[1][7], Property_Name = capacity_[1][8], Unit_Name = capacity_[1][9])
+
 
     data = Dict{String, Any}()
     nodal_data = Dict{String, Any}()
@@ -140,7 +148,15 @@ function construct_data_dictionary_2024(ntcs, arcs, capacity, nodes, demand, sce
     
         for g in gen_types
             nodal_data[node_id]["generation"][g] = Dict{String, Any}()
-            nodal_data[node_id]["generation"][g]["capacity"] = get_generation_capacity_2024(capacity, g, node_id)
+
+            gen_ratio = get_generation_ratio_2024(capacity, g, node_id,nodes)
+            corrected_capacity = get_corrected_capacity_2024(year,scenario,g,node_id,climate_year,nodes,capacity_data)
+
+            if corrected_capacity != nothing
+                nodal_data[node_id]["generation"][g]["capacity"] = gen_ratio * corrected_capacity
+            else
+                nodal_data[node_id]["generation"][g]["capacity"] = get_generation_capacity_2024(capacity,g,node_id)
+            end
     
             if g == "Solar PV" 
                 pv_series = pv[pv[!, "area"] .== node_id, climate_year]
