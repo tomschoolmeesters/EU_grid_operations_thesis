@@ -4,7 +4,25 @@ function min_max_scale(X)
     return (X .- min_vals) ./ (max_vals .- min_vals)
 end
 
-function get_reduced_timeseries(timeseries_data,option)
+function find_extreme_scenarios(demand, renewables, offshore, other_res, demand_quantile, renewables_quantile_high, renewables_quantile_low, offshore_quantile_high, other_res_quantile_low)
+    high_demand_indices = findall(x -> x >= quantile(demand, demand_quantile), demand)
+    high_renewables_indices = findall(x -> x >= quantile(renewables, renewables_quantile_high), renewables)
+    low_renewables_indices = findall(x -> x <= quantile(renewables, renewables_quantile_low), renewables)
+
+    high_offshore_indices = findall(x -> x >= quantile(offshore, offshore_quantile_high), offshore)
+    low_other_indices = findall(x -> x <= quantile(other_res, other_res_quantile_low), other_res)
+   
+
+    high_demand_high_renewables_indices = intersect(high_demand_indices, high_renewables_indices)
+    high_demand_low_renewables_indices = intersect(high_demand_indices, low_renewables_indices)
+
+    high_offshore_low_res_indices = intersect(high_offshore_indices,low_other_indices)
+
+    return high_demand_high_renewables_indices, high_demand_low_renewables_indices, high_offshore_low_res_indices
+end
+
+
+function get_reduced_timeseries(timeseries_data, option; demand_quantile=0.9, renewables_quantile_high=0.95, renewables_quantile_low=0.05, offshore_quantile_high = 0.85, other_res_quantile_low = 0.5,num_clusters=11)
 
     solar_pv_BE = timeseries_data["solar_pv"]["BE"]
     solar_pv_NL = timeseries_data["solar_pv"]["NL"]
@@ -59,9 +77,11 @@ function get_reduced_timeseries(timeseries_data,option)
         XB_flow .+= timeseries_data["xb_flows"]["$zone"]["flow"][1,:]
     end
     renewables = offshore .+ onshore .+ solar_pv
+    other_res = onshore .+ solar_pv
 
     demand_N = min_max_scale(demand)
     renewables_N = min_max_scale(renewables)
+    ohter_res_N = min_max_scale(other_res)
     offshore_N = min_max_scale(offshore)
     onshore_N = min_max_scale(onshore)
     solar_pv_N = min_max_scale(solar_pv)
@@ -117,9 +137,49 @@ function get_reduced_timeseries(timeseries_data,option)
         data = hcat(demand_N, renewables_N, XB_flow_FR_N)'
     end
 
-    # Run k-means clustering voor de gecombineerde gegevens (vraag + de drie hernieuwbare bronnen)
-    amount_of_clusters = 24
-    result = kmeans(data, amount_of_clusters)
+    # Find extreme scenarios
+    high_demand_high_renewables_indices, high_demand_low_renewables_indices, high_offshore_low_res_indices = find_extreme_scenarios(demand_N, renewables_N, offshore_N, ohter_res_N ,demand_quantile, renewables_quantile_high, renewables_quantile_low, offshore_quantile_high, other_res_quantile_low)
+    #println(high_demand_high_renewables_indices)
+    extreme_indices = unique(vcat(high_demand_high_renewables_indices, high_demand_low_renewables_indices, high_offshore_low_res_indices))
+
+    # Get data for extreme scenarios
+    extreme_data_high = data[:,high_demand_high_renewables_indices]
+    extreme_data_low = data[:,high_demand_low_renewables_indices]
+    extreme_data_off = data[:,high_offshore_low_res_indices]
+
+     # Reduce extreme scenarios to single points using clustering
+     if !isempty(extreme_data_high)
+        result_high = kmeans(extreme_data_high, 1)
+        centroid_high = result_high.centers
+    else
+        centroid_high = zeros(size(data, 1), 1) # Ensure correct dimensions
+    end
+
+    if !isempty(extreme_data_low)
+        result_low = kmeans(extreme_data_low, 1)
+        centroid_low = result_low.centers
+    else
+        centroid_low = zeros(size(data, 1), 1) # Ensure correct dimensions
+    end
+
+    if !isempty(extreme_data_off)
+        result_off = kmeans(extreme_data_off, 1)
+        centroid_off = result_off.centers
+    else
+        centroid_off = zeros(size(data, 1), 1) # Ensure correct dimensions
+    end
+
+    # Filter out extreme scenarios for main clustering
+    data_filtered = data[:,setdiff(1:end, extreme_indices)]
+
+    # Perform k-means clustering on the remaining data
+    if size(data_filtered, 2) < num_clusters
+        num_clusters = size(data_filtered, 2)
+        println("Warning: Number of clusters reduced to $(num_clusters) because there are not enough datapoints after removing extreme scenarios")
+    end
+    result_main = kmeans(data_filtered, num_clusters)
+    centroids_main = result_main.centers
+
 
 
     ################
@@ -144,14 +204,17 @@ function get_reduced_timeseries(timeseries_data,option)
         )
     =#
    
+    # Combine centroids and factors
+    centroids = hcat(centroid_high, centroid_low, centroid_off,centroids_main)
+    factor = [length(high_demand_high_renewables_indices), length(high_demand_low_renewables_indices), length(high_offshore_low_res_indices),result_main.counts...]
 
-    centroids = result.centers
-    
     println("Centroids of each cluster:")
     println(centroids)
+    println("Aantal datapunten per cluster:")
+    println(factor)
 
     # Aantal datapunten per cluster
-    num_points_per_cluster = zeros(Int, amount_of_clusters)
+    #=num_points_per_cluster = zeros(Int, amount_of_clusters)
 
     # Tel het aantal datapunten per cluster
     for cluster_id in 1:amount_of_clusters
@@ -161,7 +224,7 @@ function get_reduced_timeseries(timeseries_data,option)
     println("Aantal datapunten per cluster:")
     println(num_points_per_cluster)
     factor = num_points_per_cluster
-
+=#
     #####################################
     ### Build timeseries_data_reduced ###
     #####################################
@@ -254,9 +317,9 @@ function get_reduced_timeseries(timeseries_data,option)
         timeseries_data_reduced["xb_flows"]["CZ"]["flow"] = (centroids[5,:] .* (maxs[27] .- mins[27]) .+ mins[27])'
         timeseries_data_reduced["xb_flows"]["SE4"]["flow"] = (centroids[5,:] .* (maxs[28] .- mins[28]) .+ mins[28])'
         timeseries_data_reduced["xb_flows"]["NI"]["flow"] = (centroids[5,:] .* (maxs[29] .- mins[29]) .+ mins[29])'
-        timeseries_data_reduced["xb_flows"]["SE3"]["flow"] = zeros(1,amount_of_clusters)
-        timeseries_data_reduced["xb_flows"]["PL"]["flow"] = zeros(1,amount_of_clusters)
-        timeseries_data_reduced["xb_flows"]["NO5"]["flow"] = zeros(1,amount_of_clusters)
+        timeseries_data_reduced["xb_flows"]["SE3"]["flow"] = zeros(1,size(centroids,2))
+        timeseries_data_reduced["xb_flows"]["PL"]["flow"] = zeros(1,size(centroids,2))
+        timeseries_data_reduced["xb_flows"]["NO5"]["flow"] = zeros(1,size(centroids,2))
 
     elseif option == 4
         timeseries_data_reduced["demand"]["BE"] = centroids[1,:] .* (maxs[1] .- mins[1]) .+ mins[1]
@@ -300,5 +363,5 @@ function get_reduced_timeseries(timeseries_data,option)
     end
 
 
-    return timeseries_data_reduced, factor
+    return timeseries_data_reduced, factor, extreme_indices
 end
