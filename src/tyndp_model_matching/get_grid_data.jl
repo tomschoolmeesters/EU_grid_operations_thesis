@@ -8,11 +8,13 @@
 # demand time series and list of generator types
 # scenario{String}, e.g. "NT2025"
 
-function get_grid_data(tyndp_version, scenario, Year, climate_year)    
+function get_grid_data(tyndp_version, scenario, Year, climate_year, z_or_n)    
     if tyndp_version == "2020"
         return get_grid_data_2020(scenario, Year, climate_year)
-    elseif tyndp_version == "2024"
-        return get_grid_data_2024(scenario, Year, climate_year)
+    elseif tyndp_version == "2024" && z_or_n == "zonal"
+        return get_grid_data_2024_zonal(scenario, Year, climate_year)
+    elseif tyndp_version == "2024" && z_or_n == "nodal"
+        return get_grid_data_2024_nodal(scenario, Year, climate_year)
     else
         error("TYNDP version not supported")
     end
@@ -308,7 +310,7 @@ function get_grid_data_2020(scenario, Year, climate_year)
     return ntcs, nodes, arcs, capacity, demand, gen_types, gen_costs, emission_factor, inertia_constants, start_up_cost, node_positions
 end
 
-function get_grid_data_2024(scenario, year, climate_year)    
+function get_grid_data_2024_zonal(scenario, year, climate_year)    
     # data source: https://2024.entsos-tyndp-scenarios.eu/download/#:~:text=Electricity%20and%20Hydrogen%20Reference%20Grid%20%26%20Investment%20Candidates%20After%20Public%20Consultation    
     file_lines = joinpath(BASE_DIR,"data_sources", "TYNDP2024", "20231103 - Electricity and Hydrogen Reference Grid & Investment Candidates 3_modified.xlsx")
     # data source: https://2020.entsos-tyndp-scenarios.eu/wp-content/uploads/2020/06/TYNDP-2020-Scenario-Datafile.xlsx.zip
@@ -664,6 +666,326 @@ function get_grid_data_2024(scenario, year, climate_year)
     )
     
     return ntcs, nodes, arcs, capacity_2020_template, demand, gen_types, gen_costs, emission_factor, inertia_constants, start_up_cost, node_positions
+end
+
+
+function get_grid_data_2024_nodal(scenario, year, climate_year)    
+    # data source: https://2024.entsos-tyndp-scenarios.eu/download/#:~:text=Electricity%20and%20Hydrogen%20Reference%20Grid%20%26%20Investment%20Candidates%20After%20Public%20Consultation    
+    file_lines = joinpath(BASE_DIR,"data_sources", "TYNDP2024", "20231103 - Electricity and Hydrogen Reference Grid & Investment Candidates 3_modified.xlsx")
+    # data source: https://2020.entsos-tyndp-scenarios.eu/wp-content/uploads/2020/06/TYNDP-2020-Scenario-Datafile.xlsx.zip
+    file_nodes = joinpath(BASE_DIR,"data_sources", "TYNDP2024","LIST OF NODES_2024.xlsx")
+    # data source for all demand time series: https://tyndp.entsoe.eu/maps-data 
+    file_demand = joinpath(BASE_DIR,"data_sources", "TYNDP2024","Demand_Profiles","$(scenario)", "$(year)","Demand_$(scenario)$(year)_$(climate_year).csv")
+    #file_capacity = joinpath(BASE_DIR,"data_sources", "TYNDP2024","PEMMDB2","$(scenario)", "$(year)","Installed_generation_capacity_$(scenario)$(year)_MW.csv")
+    file_data = joinpath(BASE_DIR,"data_sources", "TYNDP2024","250117_TYNDP2024Scenarios_Electricity_SupplyMix.xlsx")
+
+    # Create dataframes from CSV/XLS files
+    lines = XLSX.readtable(file_lines, "1. Elec Ref Grid")
+    lines_complete = []
+    ntcs = []
+    node_a_ = []
+    node_b_ = []
+    for i in 1:length(lines[1][4]) # direction a -> b
+        push!(lines_complete, "$(lines[1][4][i])-$(lines[1][5][i])")
+        push!(ntcs, lines[1][2][i]) # direction a -> b
+        push!(node_a_,lines[1][4][i])
+        push!(node_b_,lines[1][5][i])
+    end
+    for i in 1:length(lines[1][4]) # direction b -> a
+        push!(lines_complete, "$(lines[1][5][i])-$(lines[1][4][i])")
+        push!(ntcs, lines[1][3][i]) # direction b -> a
+        push!(node_a_,lines[1][5][i])
+        push!(node_b_,lines[1][4][i])
+    end
+    ntcs = _DF.DataFrame(Connection = lines_complete, NTC = ntcs)
+    
+    nodes_ = XLSX.readtable(file_nodes, "Electricity")
+    nodes = _DF.DataFrame(node_id = nodes_[1][1][1:82], country_text = nodes_[1][2][1:82], country = nodes_[1][3][1:82], previous_node = nodes_[1][4][1:82], latitude = nodes_[1][5][1:82], longitude = nodes_[1][6][1:82], region = nodes_[1][7][1:82], EU28 = nodes_[1][8][1:82])
+    
+    arcs = _DF.DataFrame(line_id = lines_complete, node_a = node_a_, node_b = node_b_)
+
+    # Gen capacity installed
+    capacity_ = XLSX.readtable(file_data,"250117_TYNDP2024Scenarios_Elect")
+    capacity = _DF.DataFrame(Year = capacity_[1][1], Scenario = capacity_[1][2], Category_Simple= capacity_[1][3], Category_Detail = capacity_[1][4], Value = capacity_[1][5], 
+    Country = capacity_[1][6], Climate_Year = capacity_[1][7], Property_Name = capacity_[1][8], Unit_Name = capacity_[1][9])
+
+    
+
+    # Building the same DataFrame as the 2020 version     
+    node_positions = nodes[:, [:latitude, :longitude]]
+    demand = _DF.DataFrame(CSV.File(file_demand))
+    
+    node_line_ = []       # Node/Line
+    gen_id = []           # Generator_ID
+    parameter_ = []       # Parameter
+    category_ = []        # Category
+    case_ = []            # Case
+    scenario_ = []        # Scenario
+    year_ = []            # Year
+    climate_year_ = []    # ClimateYear
+    value_ = []           # Value 
+    simulation_id_ = []   # Simulation_ID 
+    node_1_ = []          # Node1  
+    path_ = []            # Path 
+    simulation_type_ = [] # Simulation_type 
+    sector_ = []          # Sector 
+    note_ = []            # Note 
+
+    gen_types = unique([String.(capacity[:,4][i]) for i in 1:length(capacity[:,4])])
+
+
+    
+    # Create dictionary with generation costs per generation type
+    gen_costs = Dict{String, Any}(
+        "DSR" => 119,
+        "Other non-RES"  => 120,
+        "Offshore Wind"  => 69,
+        "Onshore Wind"  => 30,
+        "Solar PV"  => 41,
+        "Solar Thermal"  => 108,
+        "Gas CCGT new" => 89,
+        "Gas CCGT CCS" => 89,
+        "Gas CCGT old 1"  => 89,
+        "Gas CCGT old 2"  => 89,
+        "Gas CCGT present 1"  => 89,
+        "Gas CCGT present 2"  => 89,
+        "Reservoir"  => 53,
+        "Run-of-River"  => 53,
+        "Gas Conventional old 1"  => 120,
+        "Gas Conventional old 2"  => 120,
+        "PS Closed"  => 120,
+        "PS Open"  => 120,
+        "Lignite new"  => 120,
+        "Lignite old 1"  => 120,
+        "Lignite old 2"  => 120,
+        "Lignite CCS"  => 120,
+        "Hard coal new"  => 120,
+        "Hard coal CCS"  => 120,
+        "Hard coal old 1"  => 120,
+        "Hard coal old 2"  => 120,
+        "Gas CCGT old 2 Bio"  => 120,
+        "Gas Conventional old 2 Bio"  => 120,
+        "Hard coal new Bio"  => 120,
+        "Hard coal old 1 Bio"  => 120,
+        "Hard coal old 2 Bio" => 120,
+        "Heavy oil old 1 Bio"  => 120,
+        "Lignite old 1 Bio"  => 120,
+        "Oil shale new Bio"  => 120,
+        "Gas OCGT new"  => 89,
+        "Gas OCGT old"  => 120,
+        "Heavy oil old 1"  => 150,
+        "Heavy oil old 2"  => 120,
+        "Nuclear" => 110,
+        "Light oil" => 140,
+        "Oil shale new" => 150,
+        "P2G" => 120,
+        "Other non-RES" => 120,
+        "Other non-RES DE00 P" => 120,
+        "Other non-RES DKE1 P" => 120,
+        "Other non-RES DKW1 P" => 120,
+        "Other non-RES FI00 P" => 120,
+        "Other non-RES FR00 P" => 120,
+        "Other non-RES MT00 P" => 120,
+        "Other non-RES UK00 P" => 120,
+        "Other RES" => 70,
+        "Gas CCGT new CCS"  => 89,
+        "Gas CCGT present 1 CCS"  => 180,
+        "Gas CCGT present 2 CCS" => 180,
+        "Battery"  => 119,
+        "Lignite old 2 Bio"  => 120,
+        "Oil shale old"  => 150,
+        "Gas CCGT CCS"  => 180,
+        "VOLL" => 10000,
+        "HVDC" => 0)
+    
+    # other non-RES are assumed to have the same emissions as gas
+    emission_factor = Dict{String, Any}( #kg/netGJ -> ton/MWh
+        "DSR" => 0,
+        "Other non-RES"  => 0,
+        "Offshore Wind"  => 0,
+        "Onshore Wind"  => 0,
+        "Solar PV"  => 0,
+        "Solar Thermal"  => 0,
+        "Gas CCGT new"        => (57*3.6)*10^(-3),
+        "Gas CCGT CCS"        => (57*3.6)*10^(-3),
+        "Gas CCGT old 1"      => (57*3.6)*10^(-3),
+        "Gas CCGT old 2"      => (57*3.6)*10^(-3),
+        "Gas CCGT present 1"  => (57*3.6)*10^(-3),
+        "Gas CCGT present 2"  => (57*3.6)*10^(-3),
+        "Reservoir"  => 0,
+        "Run-of-River"  => 0,
+        "Gas Conventional old 1"  => (57*3.6)*10^(-3),
+        "Gas Conventional old 2"  => (57*3.6)*10^(-3),
+        "PS Closed"  => (57*3.6)*10^(-3),
+        "PS Open"  =>   (57*3.6)*10^(-3),
+        "Lignite new"  =>   (101*3.6)*10^(-3),
+        "Lignite old 1"  => (101*3.6)*10^(-3),
+        "Lignite old 2"  => (101*3.6)*10^(-3),
+        "Lignite CCS"  => (101*3.6)*10^(-3),
+        "Hard coal new"  => (94*3.6)*10^(-3),
+        "Hard coal CCS"  => (94*3.6)*10^(-3),
+        "Hard coal old 1"  => (94*3.6)*10^(-3),
+        "Hard coal old 2"  => (94*3.6)*10^(-3),
+        "Gas CCGT old 2 Bio"          => (57*3.6)*10^(-3),
+        "Gas Conventional old 2 Bio"  => (57*3.6)*10^(-3),
+        "Hard coal new Bio"  =>   (94*3.6)*10^(-3),
+        "Hard coal old 1 Bio"  => (94*3.6)*10^(-3),
+        "Hard coal old 2 Bio" =>  (94*3.6)*10^(-3),
+        "Heavy oil old 1 Bio"  => (94*3.6)*10^(-3),
+        "Lignite old 1 Bio"  => (101*3.6)*10^(-3),
+        "Oil shale new Bio"  => (100*3.6)*10^(-3),
+        "Gas OCGT new"  => (57*3.6)*10^(-3),
+        "Gas OCGT old"  => (57*3.6)*10^(-3),
+        "Heavy oil old 1"  => (78*3.6)*10^(-3),
+        "Heavy oil old 2"  => (78*3.6)*10^(-3),
+        "Nuclear" => 0,
+        "Light oil" => (78*3.6)*10^(-3),
+        "Oil shale new" => (100*3.6)*10^(-3),
+        "P2G" => 0,
+        "Other non-RES DE00 P" => (57*3.6)*10^(-3),
+        "Other non-RES DKE1 P" => (57*3.6)*10^(-3),
+        "Other non-RES DKW1 P" => (57*3.6)*10^(-3),
+        "Other non-RES FI00 P" => (57*3.6)*10^(-3),
+        "Other non-RES FR00 P" => (57*3.6)*10^(-3),
+        "Other non-RES MT00 P" => (57*3.6)*10^(-3),
+        "Other non-RES UK00 P" => (57*3.6)*10^(-3),
+        "Other RES" => 0,
+        "Gas CCGT new CCS"        => (5.7*3.6)*10^(-3),
+        "Gas CCGT present 1 CCS"  => (5.7*3.6)*10^(-3),
+        "Gas CCGT present 2 CCS"  => (5.7*3.6)*10^(-3),
+        "Battery"  => 0,
+        "Lignite old 2 Bio"  => (101*3.6)*10^(-3),
+        "Oil shale old"  => (100*3.6)*10^(-3),
+        "Gas CCGT CCS"  => (5.7*3.6)*10^(-3),
+        "VOLL" => 0,
+        "HVDC" => 0
+    )
+    
+    inertia_constants = Dict{String, Any}(
+        "DSR"                       => 0,
+        "Other non-RES"             => 0,
+        "Offshore Wind"             => 0,
+        "Onshore Wind"              => 0,
+        "Solar PV"                  => 0,
+        "Solar Thermal"             => 0,
+        "Gas CCGT new"              => 5,
+        "Gas CCGT CCS"              => 5,
+        "Gas CCGT old 1"            => 5,
+        "Gas CCGT old 2"            => 5,
+        "Gas CCGT present 1"        => 5,
+        "Gas CCGT present 2"        => 5,
+        "Reservoir"                 => 3,
+        "Run-of-River"              => 3,
+        "Gas Conventional old 1"    => 5,
+        "Gas Conventional old 2"    => 5,
+        "PS Closed"                 => 3,
+        "PS Open"                   => 3,
+        "Lignite new"               => 4,
+        "Lignite old 1"             => 4,
+        "Lignite old 2"             => 4,
+        "Lignite CCS"               => 4,
+        "Hard coal new"             => 4,
+        "Hard coal CCS"             => 4,
+        "Hard coal old 1"           => 4,
+        "Hard coal old 2"           => 4,
+        "Gas CCGT old 2 Bio"        => 5,
+        "Gas Conventional old 2 Bio"=> 5,
+        "Hard coal new Bio"         => 4,
+        "Hard coal old 1 Bio"       => 4,
+        "Hard coal old 2 Bio"       => 4,
+        "Heavy oil old 1 Bio"       => 4,
+        "Lignite old 1 Bio"         => 4,
+        "Oil shale new Bio"         => 4,
+        "Gas OCGT new"              => 5,
+        "Gas OCGT old"              => 5,
+        "Heavy oil old 1"           => 4,
+        "Heavy oil old 2"           => 4,
+        "Nuclear"                   => 6,
+        "Light oil"                 => 4,
+        "Oil shale new"             => 4,
+        "P2G"                       => 0,
+        "Other non-RES DE00 P"      => 0,
+        "Other non-RES DKE1 P"      => 0,
+        "Other non-RES DKW1 P"      => 0,
+        "Other non-RES FI00 P"      => 0,
+        "Other non-RES FR00 P"      => 0,
+        "Other non-RES MT00 P"      => 0,
+        "Other non-RES UK00 P"      => 0,
+        "Other RES"                 => 0,
+        "Gas CCGT new CCS"          => 5,
+        "Gas CCGT present 1 CCS"    => 5,
+        "Gas CCGT present 2 CCS"    => 5,
+        "Battery"                   => 0,
+        "Lignite old 2 Bio"         => 4,
+        "Oil shale old"             => 4,
+        "Gas CCGT CCS"              => 5,
+        "VOLL"                      => 0,
+        "HVDC"                      => 0
+    )
+    
+    start_up_cost = Dict{String, Any}( #EUR/MW/start
+        "DSR" => 0,
+        "Other non-RES"  => 90,
+        "Offshore Wind"  => 0,
+        "Onshore Wind"  => 0,
+        "Solar PV"  => 0,
+        "Solar Thermal"  => 0,
+        "Gas CCGT new"        => 90,
+        "Gas CCGT CCS"        => 90,
+        "Gas CCGT old 1"      => 90,
+        "Gas CCGT old 2"      => 90,
+        "Gas CCGT present 1"  => 90,
+        "Gas CCGT present 2"  => 90,
+        "Reservoir"  => 0,
+        "Run-of-River"  => 0,
+        "Gas Conventional old 1"  => 90,
+        "Gas Conventional old 2"  => 90,
+        "PS Closed"  => 150,
+        "PS Open"  =>   150,
+        "Lignite new"  =>   175,
+        "Lignite old 1"  => 175,
+        "Lignite old 2"  => 175,
+        "Lignite CCS"=> 175,
+        "Hard coal new"  => 175,
+        "Hard coal CCS"    => 175,
+        "Hard coal old 1"  => 175,
+        "Hard coal old 2"  => 175,
+        "Gas CCGT old 2 Bio"          => 90,
+        "Gas Conventional old 2 Bio"  => 90,
+        "Hard coal new Bio"  =>   175,
+        "Hard coal old 1 Bio"  => 175,
+        "Hard coal old 2 Bio" =>  175,
+        "Heavy oil old 1 Bio"  => 150,
+        "Lignite old 1 Bio"  => 175,
+        "Oil shale new Bio"  => 150,
+        "Gas OCGT new"  => 90,
+        "Gas OCGT old"  => 90,
+        "Heavy oil old 1"  => 150,
+        "Heavy oil old 2"  => 150,
+        "Nuclear" => 1000,
+        "Light oil" =>     150,
+        "Oil shale new" => 150,
+        "P2G" => 0,
+        "Other non-RES DE00 P" => 175,
+        "Other non-RES DKE1 P" => 175,
+        "Other non-RES DKW1 P" => 175,
+        "Other non-RES FI00 P" => 175,
+        "Other non-RES FR00 P" => 175,
+        "Other non-RES MT00 P" => 175,
+        "Other non-RES UK00 P" => 175,
+        "Other RES" => 0,
+        "Gas CCGT new CCS"        => 90,
+        "Gas CCGT present 1 CCS"  => 90,
+        "Gas CCGT present 2 CCS"  => 90,
+        "Battery"  => 0,
+        "Lignite old 2 Bio"  => 175,
+        "Oil shale old"  => 150,
+        "Gas CCGT CCS"  => 90,
+        "VOLL" => 0,
+        "HVDC" => 0
+    )
+    
+    return ntcs, nodes, arcs, capacity, demand, gen_types, gen_costs, emission_factor, inertia_constants, start_up_cost, node_positions
 end
     
 function add_NOx_and_SOx_emissions(input_data)

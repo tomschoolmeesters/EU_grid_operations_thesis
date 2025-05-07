@@ -20,7 +20,6 @@ import Feather
 import PowerModels; const _PM = PowerModels
 import JSON
 using Plots
-using Plots
 using EU_grid_operations; const _EUGO = EU_grid_operations
 
 # Select your favorite solver
@@ -52,23 +51,23 @@ solver = JuMP.optimizer_with_attributes(Gurobi.Optimizer, "OutputFlag" => 0)
 #climate_year = "2009"
 
 # A sample set for TYNDP 2020
- tyndp_version = "2020"
- fetch_data = true
- number_of_hours = 8760
- scenario = "DE"
- year = "2040"
- climate_year = "1984"
- start_hour = 1
+tyndp_version = "2024"
+fetch_data = true
+number_of_hours = 8760
+scenario = "DE"
+year = "2040"
+climate_year = "2008"
+start_hour = 1
 
 
 # Load grid and scenario data
 if fetch_data == true
   pv, wind_onshore, wind_offshore = _EUGO.load_res_data()
-  ntcs, nodes, arcs, capacity, demand, gen_types, gen_costs, emission_factor, inertia_constants, node_positions = _EUGO.get_grid_data(tyndp_version, scenario, year, climate_year)
+  ntcs, nodes, arcs, capacity, demand, gen_types, gen_costs, emission_factor, inertia_constants, node_positions = _EUGO.get_grid_data(tyndp_version, scenario, year, climate_year,"zonal")
 end
 
 # Construct input data dictionary in PowerModels style 
-scenario_id = "$scenario$year"
+scenario_id = "$scenario$year"                          
 input_data, nodal_data = _EUGO.construct_data_dictionary(tyndp_version, ntcs, arcs, capacity, nodes, demand, scenario_id, climate_year, gen_types, pv, wind_onshore, wind_offshore, gen_costs, emission_factor, inertia_constants, node_positions)
 
 input_data_raw = deepcopy(input_data)
@@ -78,7 +77,6 @@ print("######################################", "\n")
 print("### STARTING HOURLY OPTIMISATION ####", "\n")
 print("######################################", "\n")
 
-
 # Create dictionary for writing out results
 result = Dict{String, Any}("$hour" => nothing for hour in 1:number_of_hours)
 for hour = start_hour:(start_hour+number_of_hours-1)
@@ -86,8 +84,48 @@ for hour = start_hour:(start_hour+number_of_hours-1)
     # Write time series data into input data dictionary
     _EUGO.prepare_hourly_data!(input_data, nodal_data, hour)
     # Solve Network Flow OPF using PowerModels
-    result["$hour"] = _PM.solve_opf(input_data, PowerModels.NFAPowerModel, solver)
+    result["$hour"] = _PM.solve_opf(input_data, PowerModels.NFAPowerModel, solver);
 end
+
+print("#############################################", "\n")
+print("### STARTING HOURLY BATCHED OPTIMISATION ####", "\n")
+print("#############################################", "\n")
+
+batch_size = 876
+iterations = Int(number_of_hours / batch_size)
+
+# Create a directory for storing batches if it doesn't exist
+if !isdir("opf_batches")
+    mkdir("opf_batches")
+end
+
+# Loop over the number of iterations
+for i in 0:(iterations - 1)
+  batch_start = i * batch_size + start_hour
+  batch_end = min(batch_start + batch_size - 1, start_hour + number_of_hours - 1)
+  
+  println("Processing batch $i: Hours $batch_start to $batch_end")
+  
+  # Create a dictionary for the batch results
+  batch_result = Dict{String, Any}(string(hour) => nothing for hour in batch_start:batch_end)
+  
+  for hour in batch_start:batch_end
+      println("  Hour $hour of $batch_end")
+      # Write time series data into input data dictionary
+      _EUGO.prepare_hourly_data!(input_data, nodal_data, hour)
+      # Solve Network Flow OPF using PowerModels
+      batch_result[string(hour)] = _PM.solve_opf(input_data, PowerModels.NFAPowerModel, solver)
+  end
+  
+  # Save the batch result to a file
+  file_name = joinpath("results", join([scenario,"_",year,"_",climate_year]))
+  opf_file_name = join([file_name, "_zonal_opf_",batch_start,"_to_",batch_end,".json"])
+  json_string = JSON.json(batch_result)
+  open(opf_file_name,"w") do f
+  write(f, json_string)
+  end
+end
+
 
 ## Write out JSON files
 # Result file, with hourly results

@@ -691,10 +691,19 @@ end
 
 
 
-function candidate_lines(nodal_input,OFF_dc_buses)
-
-    updated_OFF_DC_buses = update_connectionzone(OFF_dc_buses)
+function candidate_lines(nodal_input,OFF_dc_buses; offshore_hubs = false)
     OFF_ac_buses = OFF_AC_buses(nodal_input, OFF_dc_buses)
+
+    if offshore_hubs
+        OFF_hubs_buses = []
+        for (b,bus) in nodal_input["busdc"]
+            if bus["name"] in ["OFF1","OFF2","OFF3","OFF4","OFF5"]
+                push!(OFF_hubs_buses, bus["index"])
+            end
+        end
+        OFF_dc_buses = vcat(OFF_dc_buses, OFF_hubs_buses)
+    end
+    updated_OFF_DC_buses = update_connectionzone(OFF_dc_buses)
     
     ################################
     ### Initialise Candidate Set ###
@@ -799,9 +808,9 @@ function candidate_lines(nodal_input,OFF_dc_buses)
             ne_branch["$Branch_idx"] = exis_branch
             ne_branch["$Branch_idx"]["source_id"][2] = Branch_idx
             ne_branch["$Branch_idx"]["index"] = Branch_idx
-            ne_branch["$Branch_idx"]["rate_a"] = 50
-            ne_branch["$Branch_idx"]["rate_b"] = 50 
-            ne_branch["$Branch_idx"]["rate_c"] = 50
+            ne_branch["$Branch_idx"]["rate_a"] = 20
+            ne_branch["$Branch_idx"]["rate_b"] = 20 
+            ne_branch["$Branch_idx"]["rate_c"] = 20
             Branch_idx = Branch_idx + 1
         end
     end
@@ -812,9 +821,9 @@ function candidate_lines(nodal_input,OFF_dc_buses)
         ne_branch["$Branch_idx"] = exis_branch
         ne_branch["$Branch_idx"]["f_bus"] = Int(bus1)
         ne_branch["$Branch_idx"]["t_bus"] = Int(bus2)
-        ne_branch["$Branch_idx"]["rate_a"] = 50
-        ne_branch["$Branch_idx"]["rate_b"] = 50 
-        ne_branch["$Branch_idx"]["rate_c"] = 50
+        ne_branch["$Branch_idx"]["rate_a"] = 20
+        ne_branch["$Branch_idx"]["rate_b"] = 20 
+        ne_branch["$Branch_idx"]["rate_c"] = 20
         ne_branch["$Branch_idx"]["source_id"][2] = Int(Branch_idx)
         ne_branch["$Branch_idx"]["index"] = Int(Branch_idx)
         Branch_idx = Branch_idx + 1
@@ -865,8 +874,8 @@ function update_cost_data(ne_branch,ne_branchDC,nodal_input)
     AC_cost_MWkm = 0.0012
     DC_cost_MWkm = 0.00234
     interest = 0.07
-    lifetime_AC = 20
-    lifetime_DC = 25
+    lifetime_AC = 40
+    lifetime_DC = 30
     annuity_AC = 1/(((1+interest)^(lifetime_AC-1))/((1+interest)^(lifetime_AC*interest)))
     annuity_DC = 1/(((1+interest)^(lifetime_DC-1))/((1+interest)^(lifetime_DC*interest)))
 
@@ -878,7 +887,7 @@ function update_cost_data(ne_branch,ne_branchDC,nodal_input)
         AC_cost = AC_cost_MWkm * d * P *10^6 #Euro
         AC_cost_year = AC_cost * annuity_AC
         AC_cost_hour = AC_cost_year/8760
-        branch["construction_cost"] = AC_cost_hour/100/10
+        branch["construction_cost"] = AC_cost_hour/100
     end
 
     for (b,branchdc) in ne_branchDC
@@ -889,7 +898,7 @@ function update_cost_data(ne_branch,ne_branchDC,nodal_input)
         DC_cost = DC_cost_MWkm * d * P * 10^6 #Euro
         DC_cost_year = DC_cost * annuity_DC
         DC_cost_hour = DC_cost_year/8760
-        branchdc["cost"] = DC_cost_hour/100/10
+        branchdc["cost"] = DC_cost_hour/100
     end
 
     return ne_branch, ne_branchDC

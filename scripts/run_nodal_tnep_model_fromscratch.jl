@@ -52,7 +52,7 @@ s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => true, "fi
 ### Representative timestep simulation ###
 ##########################################
 
-hours = 1:48
+hours = 1:24
 # Create dictionary for writing out results
 print("######################################", "\n")
 print("####### PREPARING DATA      ##########", "\n")
@@ -65,17 +65,18 @@ gurobi = JuMP.optimizer_with_attributes(
     Gurobi.Optimizer,
     "MIPGap" => 0.05,
     "DualReductions"  => 0,
-    "FeasibilityTol" => 1e-6)         # Stop als de gap kleiner is dan 0.05
+    "FeasibilityTol" => 1e-6,
+    "MIPFocus" => 3) 
 
 
-s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => true, "fix_cross_border_flows" => true, "process_data_internally" => true)
+s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => true, "fix_cross_border_flows" => true, "process_data_internally" => false)
 @time result = _PMACDC.run_mp_tnepopf_repr(mn_input_data,_PM.DCPPowerModel, gurobi, multinetwork = true; setting = s)
 
 
 #############################
 ### Plot built candidates ###
 #############################
-plot_filename = joinpath("results", join(["grid_input_tnep",use_case,".pdf"]))
+plot_filename = joinpath("results", join(["grid_input_tnep2",use_case,".pdf"]))
 plot_grid_tnep(zone_grid,plot_filename)
 
 

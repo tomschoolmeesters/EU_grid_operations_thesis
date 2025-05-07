@@ -72,6 +72,77 @@ function scale_generation!(tyndp_capacity, grid_data, scenario, climate_year, zo
     end 
 end
 
+
+function scale_generation24!(tyndp_capacity, grid_data, scenario_id, climate_year, zone_mapping; ns_hub_cap = nothing, exclude_offshore_wind = false)
+    scenario = scenario_id[1:2]
+    year = scenario_id[3:end]
+
+    if scenario == "DE"
+        scenario = "Distributed Energy"
+    elseif scenario == "GA"
+        scenario = "Global Ambition"
+    elseif scenario == "NT"
+        scenario = "National Trends"
+    end
+
+    for (g, gen) in grid_data["gen"]
+        zone = gen["zone"]
+
+        # Check if generator type exists in input data
+        if haskey(gen, "type_tyndp")
+            type = gen["type_tyndp"]
+        else
+            print(g, "\n")
+        end
+
+        # Calculate zonal capacity: For LU there are three different zones coming from the TYNDP data
+        zonal_tyndp_capacity = 0
+        
+        zone_x = zone_mapping[zone][1]
+        if haskey(country_names,zone_x)
+            name = country_names[zone_x]
+        end
+        #for tyndp_zone in tyndp_zones
+            # obtain #data,scenario,year,type,climate_year,node
+            zonal_capacity = get_generation_capacity_2024_v2(tyndp_capacity, scenario,year, type, climate_year, name)
+            println("$type, $zone in $name: $zonal_capacity")
+            
+            zonal_tyndp_capacity =  zonal_tyndp_capacity + zonal_capacity
+            #=
+            if zone == "DK1"
+                zonal_tyndp_capacity = zonal_tyndp_capacity * correction[scenario][year][type]
+            elseif zone == "DK2"
+                zonal_tyndp_capacity = zonal_tyndp_capacity * correction[scenario][year][type]
+            else zone == "UK"
+                zonal_tyndp_capacity = zonal_tyndp_capacity * correction[scenario][year][type]
+            end
+            =#
+        # If the zonal capacity is different than zero, scale "pmax" based on the ratios of the zonal capacities
+        if zonal_tyndp_capacity !=0
+            for (z, zone_) in grid_data["zonal_generation_capacity"]
+                if zone_["zone"] == zone
+                    scaling_factor = max(0, ((zonal_tyndp_capacity / grid_data["baseMVA"]) / zone_[type]) )
+                    if exclude_offshore_wind
+                        if gen["type"] != "Offshore Wind"
+                            gen["pmax"] = gen["pmax"] * scaling_factor
+                        end
+                    else
+                        gen["pmax"] = gen["pmax"] * scaling_factor
+                    end
+                end
+            end
+        end
+
+        # Check if a different capacity should be written into the offshore wind generator NSEH
+        if !isnothing(ns_hub_cap)
+            if zone == "NSEH"
+                gen["pmax"] = ns_hub_cap
+            end
+        end
+    end 
+end
+
+
 # This function maps the zone names in the EU Grid model to the zone names of the TYNDP model
 function map_zones()
     zone_mapping = Dict{String, Any}()
@@ -383,6 +454,39 @@ function merge_zones!(data; merge_zones = Dict())
 end
 
 
+function get_xb_flows_v2(zone_grid, zonal_result, zonal_input, zone_mapping)
+    #zone = zone_grid["zones"][1]
+    borders = Dict{String, Any}()
+    for (b, border) in zone_grid["borders"]
+        borders[border["name"]] = Dict{String, Any}("flow" => zeros(1, length(zonal_result)))
+        if haskey(zone_mapping, border["name"])
+            for (r, res) in zonal_result
+                flow = 0
+                for zone in zone_grid["zones"]
+                    tyndp_zone_fr = zone_mapping[zone][1]
+                    tyndp_zone_to = zone_mapping[border["name"]][1]
+                
+                    int_name_fr = join([tyndp_zone_fr,"-",tyndp_zone_to])
+                    int_name_to = join([tyndp_zone_to,"-",tyndp_zone_fr])
+                    flow_i = 0
+                    
+                    for (b, branch) in zonal_input["branch"]
+                        if branch["name"] == int_name_fr
+                            flow_i = res[b]["pf"]
+                        elseif branch["name"] == int_name_to
+                            flow_i = res[b]["pt"]
+                        end
+                    end
+                    flow += flow_i
+                end
+                borders[border["name"]]["flow"][1, parse(Int, r)] = flow
+            end   
+        end
+     end
+     return borders
+end
+
+
 function get_xb_flows(zone_grid, zonal_result, zonal_input, zone_mapping)
     zone = zone_grid["zones"][1]
     borders = Dict{String, Any}()
@@ -409,6 +513,7 @@ function get_xb_flows(zone_grid, zonal_result, zonal_input, zone_mapping)
      end
      return borders
 end
+
 
 function get_demand_reponse!(zone_grid, zonal_input, zone_mapping, timeseries_data; cost = 140)
     zone = zone_grid["zones"][1]

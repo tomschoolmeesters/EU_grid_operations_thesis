@@ -376,6 +376,50 @@ function add_VOLL_generation(EU_grid)
     return EU_grid
 end
 
+function add_offshore_hub(input_data)
+    
+    country_dict = Dict()
+    # Verzamel landen per zone in country_dict
+    for (b_id, bus) in input_data["bus"]
+        if !haskey(country_dict, bus["zone"])
+            country_dict[bus["zone"]] = bus["country"]
+        end   
+    end
+
+    reference_key_DC = rand(keys(input_data["busdc"]))
+    reference_bus_DC = deepcopy(input_data["busdc"]["$reference_key_DC"])
+    
+    file = "./data_sources/Relocation_WindFarms.xlsx"
+    xls = XLSX.readtable(file, "Blad2")
+    
+    data, headers = xls
+    
+    # Kolommen indexeren
+    name_col = findfirst(==(:Offshore_Hub), headers) 
+    idx_col = findfirst(==(:DC_bus), headers)
+    lat_col = findfirst(==(:lat), headers)
+    lon_col = findfirst(==(:lon), headers)
+    zone_col = findfirst(==(:zone), headers)
+    
+     # Loop door de gegevens
+     for i in 1:length(data[1])
+        zone = data[zone_col][i]
+        name = data[name_col][i]
+        latitude = data[lat_col][i]
+        longitude = data[lon_col][i]
+        dc_index = data[idx_col][i] 
+            
+        input_data["busdc"]["$dc_index"] = deepcopy(reference_bus_DC)
+        input_data["busdc"]["$dc_index"]["lat"] = latitude
+        input_data["busdc"]["$dc_index"]["lon"] = longitude
+        input_data["busdc"]["$dc_index"]["name"] = name
+        input_data["busdc"]["$dc_index"]["source_id"][2] = dc_index
+        input_data["busdc"]["$dc_index"]["index"] = dc_index
+        input_data["busdc"]["$dc_index"]["zone"] = country_dict[zone]
+    end
+
+end
+
 
             
 
