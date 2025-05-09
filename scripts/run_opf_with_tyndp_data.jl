@@ -203,7 +203,7 @@ end
 ##########################################
 # Create reduced timeseries_data
 option = 3 # 1: all zones, 2: all zones without demand, 3: all zones without demand and offshore wind, 4: all zones without demand and offshore wind and onshore wind
-timeseries_data_reduced, factor = get_reduced_timeseries(timeseries_data,option)
+timeseries_data_reduced, factor, extreme_indices = get_reduced_timeseries(timeseries_data,option)
 
 # This function will create a dictionary with all hours as result but with representative timesteps
 hour_start_idx = 1

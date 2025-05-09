@@ -257,7 +257,7 @@ function nodal_price(hour_range)
     for bus in keys(nodal_input["bus"])
         price_per_node = Float64[]
         for i in hour_range
-            price =nodal_result["$i"]["solution"]["bus"]["$bus"]["lam_kcl_r"]
+            price =-nodal_result["$i"]["solution"]["bus"]["$bus"]["lam_kcl_r"]
             push!(price_per_node,price)
             if price >p_maximum
                 p_maximum = price
@@ -272,7 +272,7 @@ function nodal_price(hour_range)
     for bus in keys(nodal_input["busdc"])
         price_per_node = Float64[]
         for i in hour_range
-            price =nodal_result["$i"]["solution"]["busdc"]["$bus"]["lam_kcl_r"]
+            price =-nodal_result["$i"]["solution"]["busdc"]["$bus"]["lam_kcl_r"]
             push!(price_per_node,price)
             if price >p_maximum
                 p_maximum = price
@@ -298,7 +298,9 @@ function plot_nodes_with_prices(
     plot_node_numbers_dc = false
 )
 
-    prices,p_min,p_max = nodal_price([4012])
+    prices,p_min,p_max = nodal_price([3])
+    p_min = 0
+    p_max = 50
     # Data containers voor nodes
     nodes = []
     lat = []

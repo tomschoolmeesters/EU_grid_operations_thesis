@@ -4,7 +4,7 @@ function min_max_scale(X)
     return (X .- min_vals) ./ (max_vals .- min_vals)
 end
 
-function find_extreme_scenarios(demand, renewables, offshore, other_res, demand_quantile, renewables_quantile_high, renewables_quantile_low, offshore_quantile_high, other_res_quantile_low)
+function find_extreme_scenarios(demand, renewables, offshore, other_res, demand_w, demand_nw, demand_quantile,renewables_quantile_high, renewables_quantile_low, offshore_quantile_high, other_res_quantile_low, demand_w_quantile_low, demand_nw_quantile_high)
     high_demand_indices = findall(x -> x >= quantile(demand, demand_quantile), demand)
     high_renewables_indices = findall(x -> x >= quantile(renewables, renewables_quantile_high), renewables)
     low_renewables_indices = findall(x -> x <= quantile(renewables, renewables_quantile_low), renewables)
@@ -12,17 +12,21 @@ function find_extreme_scenarios(demand, renewables, offshore, other_res, demand_
     high_offshore_indices = findall(x -> x >= quantile(offshore, offshore_quantile_high), offshore)
     low_other_indices = findall(x -> x <= quantile(other_res, other_res_quantile_low), other_res)
    
+    low_demand_w_indices = findall(x -> x <= quantile(demand_w, demand_w_quantile_low), demand_w)
+    high_demand_nw_indices = findall(x -> x >= quantile(demand_nw, demand_nw_quantile_high), demand_nw)
 
     high_demand_high_renewables_indices = intersect(high_demand_indices, high_renewables_indices)
     high_demand_low_renewables_indices = intersect(high_demand_indices, low_renewables_indices)
 
     high_offshore_low_res_indices = intersect(high_offshore_indices,low_other_indices)
 
-    return high_demand_high_renewables_indices, high_demand_low_renewables_indices, high_offshore_low_res_indices
+    low_demandw_high_demandnw_indices = intersect(low_demand_w_indices, high_demand_nw_indices)
+
+    return high_demand_high_renewables_indices, high_demand_low_renewables_indices, high_offshore_low_res_indices, low_demandw_high_demandnw_indices
 end
 
 
-function get_reduced_timeseries(timeseries_data, option; demand_quantile=0.9, renewables_quantile_high=0.95, renewables_quantile_low=0.05, offshore_quantile_high = 0.85, other_res_quantile_low = 0.5,num_clusters=11)
+function get_reduced_timeseries(timeseries_data, option; demand_quantile=0.85, renewables_quantile_high=0.9, renewables_quantile_low=0.1, offshore_quantile_high = 0.75, other_res_quantile_low = 0.5, demand_w_quantile_low = 0.35, demand_nw_quantile_high = 0.65,num_clusters=11)
 
     solar_pv_BE = timeseries_data["solar_pv"]["BE"]
     solar_pv_NL = timeseries_data["solar_pv"]["NL"]
@@ -78,10 +82,14 @@ function get_reduced_timeseries(timeseries_data, option; demand_quantile=0.9, re
     end
     renewables = offshore .+ onshore .+ solar_pv
     other_res = onshore .+ solar_pv
+    demand_w = demand_UK + demand_NL + demand_DK1
+    demand_nw = demand_BE + demand_DE
 
     demand_N = min_max_scale(demand)
     renewables_N = min_max_scale(renewables)
     ohter_res_N = min_max_scale(other_res)
+    demand_w_N = min_max_scale(demand_w)
+    demand_nw_N = min_max_scale(demand_nw)
     offshore_N = min_max_scale(offshore)
     onshore_N = min_max_scale(onshore)
     solar_pv_N = min_max_scale(solar_pv)
@@ -138,14 +146,15 @@ function get_reduced_timeseries(timeseries_data, option; demand_quantile=0.9, re
     end
 
     # Find extreme scenarios
-    high_demand_high_renewables_indices, high_demand_low_renewables_indices, high_offshore_low_res_indices = find_extreme_scenarios(demand_N, renewables_N, offshore_N, ohter_res_N ,demand_quantile, renewables_quantile_high, renewables_quantile_low, offshore_quantile_high, other_res_quantile_low)
+    high_demand_high_renewables_indices, high_demand_low_renewables_indices, high_offshore_low_res_indices, low_demandw_high_demandnw_indices = find_extreme_scenarios(demand_N, renewables_N, offshore_N, ohter_res_N , demand_w_N, demand_nw_N,demand_quantile, renewables_quantile_high, renewables_quantile_low, offshore_quantile_high, other_res_quantile_low,demand_w_quantile_low, demand_nw_quantile_high)
     #println(high_demand_high_renewables_indices)
-    extreme_indices = unique(vcat(high_demand_high_renewables_indices, high_demand_low_renewables_indices, high_offshore_low_res_indices))
+    extreme_indices = unique(vcat(high_demand_high_renewables_indices, high_demand_low_renewables_indices, high_offshore_low_res_indices, low_demandw_high_demandnw_indices))
 
     # Get data for extreme scenarios
     extreme_data_high = data[:,high_demand_high_renewables_indices]
     extreme_data_low = data[:,high_demand_low_renewables_indices]
     extreme_data_off = data[:,high_offshore_low_res_indices]
+    extreme_data_demand = data[:,low_demandw_high_demandnw_indices]
 
      # Reduce extreme scenarios to single points using clustering
      if !isempty(extreme_data_high)
@@ -167,6 +176,13 @@ function get_reduced_timeseries(timeseries_data, option; demand_quantile=0.9, re
         centroid_off = result_off.centers
     else
         centroid_off = zeros(size(data, 1), 1) # Ensure correct dimensions
+    end
+
+    if !isempty(extreme_data_demand)
+        result_demand = kmeans(extreme_data_demand, 1)
+        centroid_demand = result_demand.centers
+    else
+        centroid_demand = zeros(size(data, 1), 1) # Ensure correct dimensions
     end
 
     # Filter out extreme scenarios for main clustering
@@ -205,8 +221,8 @@ function get_reduced_timeseries(timeseries_data, option; demand_quantile=0.9, re
     =#
    
     # Combine centroids and factors
-    centroids = hcat(centroid_high, centroid_low, centroid_off,centroids_main)
-    factor = [length(high_demand_high_renewables_indices), length(high_demand_low_renewables_indices), length(high_offshore_low_res_indices),result_main.counts...]
+    centroids = hcat(centroid_high, centroid_low, centroid_off,centroid_demand,centroids_main)
+    factor = [length(high_demand_high_renewables_indices), length(high_demand_low_renewables_indices), length(high_offshore_low_res_indices),length(low_demandw_high_demandnw_indices),result_main.counts...]
 
     println("Centroids of each cluster:")
     println(centroids)

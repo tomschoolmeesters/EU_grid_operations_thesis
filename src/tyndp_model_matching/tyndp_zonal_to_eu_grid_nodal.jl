@@ -466,18 +466,18 @@ function get_xb_flows_v2(zone_grid, zonal_result, zonal_input, zone_mapping)
                     tyndp_zone_fr = zone_mapping[zone][1]
                     tyndp_zone_to = zone_mapping[border["name"]][1]
                 
-                    int_name_fr = join([tyndp_zone_fr,"-",tyndp_zone_to])
-                    int_name_to = join([tyndp_zone_to,"-",tyndp_zone_fr])
+                    int_name_fr = join([tyndp_zone_fr,"-",tyndp_zone_to]) #bv. DE00-AT00 #fbus = DE, tbus = AT
+                    int_name_to = join([tyndp_zone_to,"-",tyndp_zone_fr]) #bv. AT00-DE00 #fbus = AT, tbus = DE
                     flow_i = 0
                     
                     for (b, branch) in zonal_input["branch"]
                         if branch["name"] == int_name_fr
-                            flow_i = res[b]["pf"]
+                            flow_i = res[b]["pf"] #withdrawn from DE
                         elseif branch["name"] == int_name_to
-                            flow_i = res[b]["pt"]
+                            flow_i = res[b]["pt"] #withdrawn from DE
                         end
                     end
-                    flow += flow_i
+                    flow += flow_i #positive = export from DE to AT, negative = import from DE to AT
                 end
                 borders[border["name"]]["flow"][1, parse(Int, r)] = flow
             end   
