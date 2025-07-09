@@ -249,7 +249,7 @@ function Analyse_bus(n,start_hour,planning_year)
 
 end
 
-function nodal_price(hour_range)
+function nodal_price(nodal_result, nodal_input,hour_range)
     Nodal_price = Dict()
     p_minimum = 0
     p_maximum = 0
@@ -291,16 +291,17 @@ end
 
 
 using PlotlyJS, ColorSchemes, DataFrames
-function plot_nodes_with_prices(
-    ;data = zone_grid, 
-    file_name = joinpath("results", join(["grid_nodalprice.pdf"])),
+function plot_nodes_with_prices(data,nodal_result
+    ; 
+    file_name = joinpath("results", join(["grid_nodalprice.svg"])),
+    legend_file_name = joinpath("results", join(["grid_legend.svg"])),
     plot_node_numbers_ac = false,
     plot_node_numbers_dc = false
 )
 
-    prices,p_min,p_max = nodal_price([3])
-    p_min = 0
-    p_max = 50
+    prices, p_min, p_max = nodal_price(nodal_result,data,[6])
+    p_min = -50
+    p_max = 300
     # Data containers voor nodes
     nodes = []
     lat = []
@@ -333,12 +334,11 @@ function plot_nodes_with_prices(
         for row in eachrow(dict_nodes)]
     
     # Normaliseer de kleuren naar [0, 1] voor de colormap
-
     norm_prices = (node_colors .- p_min) ./ (p_max - p_min + 1e-10)  # Vermijd deling door nul
 
     # Plot nodes
-    
     traces = [PlotlyJS.scattergeo()]
+
     for (i, row) in enumerate(eachrow(dict_nodes))
         color = ColorSchemes.get(ColorSchemes.jet, norm_prices[i])  # Kleur op basis van prijs
         marker = PlotlyJS.attr(size = 3.5, color = color)
@@ -351,17 +351,55 @@ function plot_nodes_with_prices(
     end
     traces = traces[2:end]
     
-    #return traces,B
-    # Maak layout
+    # Layout van de plot
     geo = PlotlyJS.attr(fitbounds="locations")
-    layout = PlotlyJS.Layout(geo = geo, geo_resolution = 50, width = 1000, height = 1100,
-    showlegend = true,
-    margin=PlotlyJS.attr(l=0, r=0, t=0, b=0))
+    layout = PlotlyJS.Layout(
+        geo = geo, 
+        geo_resolution = 50, 
+        width = 1000, 
+        height = 1100,
+        showlegend = true,
+        margin = PlotlyJS.attr(l=0, r=0, t=0, b=0)
+    )
 
-    # Plot en save
-
+    # Plot en save de kaart
     fig = PlotlyJS.plot(traces, layout)
     PlotlyJS.savefig(fig, file_name)
 
+    # === Extra figuur voor legenda ===
+    colors = [ColorSchemes.get(ColorSchemes.jet, i) for i in 0:0.01:1]
+    y_vals = collect(range(p_min, p_max, length=length(colors)))
+
+    legend_trace = PlotlyJS.scatter(
+        x = fill(1, length(colors)), 
+        y = y_vals,
+        mode = "markers",
+        marker = PlotlyJS.attr(
+            size = 10,
+            color = colors,
+            showscale = true,
+            colorbar = PlotlyJS.attr(
+                title = "Prijs (€/MWh)",
+                titleside = "right",
+                thickness = 15
+            )
+        ),
+        showlegend = false
+    )
+
+    # Layout van de legenda
+  legend_layout = PlotlyJS.Layout(
+    title = "Legenda Kleurenschaal",
+    width = 300,
+    height = 600,
+    margin = PlotlyJS.attr(l=10, r=10, t=50, b=10),
+    plot_bgcolor = "white",      # Achtergrond binnen de assen
+    paper_bgcolor = "white"      # Hele figuurachtergrond
+)
+
+    # Plot en save de legenda
+    legend_fig = PlotlyJS.plot([legend_trace], legend_layout)
+    PlotlyJS.savefig(legend_fig, legend_file_name)
 end
+
 

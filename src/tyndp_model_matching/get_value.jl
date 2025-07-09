@@ -17,6 +17,96 @@ function get_demand_data(demand, area, hour)
     return value
 end
 
+function get_demand_data_ext(orig_demand,demand,nodes,area,scenario,year,climate_year)
+     #####################
+    if scenario == "DE"
+        scenario = "Distributed Energy"
+    elseif scenario == "GA"
+        scenario = "Global Ambition"
+    elseif scenario == "NT"
+        scenario = "National Trends"
+    end
+
+     #Map area to country
+    country_names =  Dict{String,Any}()
+    for i_idx in 1:length(nodes[:,1])
+        i = nodes[i_idx,1]
+        country_names[i] = nodes[i_idx,2]
+    end
+    country_names["DKE1"] = "Denmark"
+    country_names["DKW1"] = "Denmark"
+    country_names["DKKF"] = "Denmark"
+    country_names["DEKF"] = "Denmark"
+    country_names["DK00"] = "Denmark"
+    country_names["UKNI"] = "United Kingdom"
+    country_names["GR03"] = "Greece"
+    country_names["FR15"] = "France"
+    
+    country = country_names[area]
+    
+    climate_year = "CY$climate_year"
+
+    multiple_nodes=[]
+    for (n,c) in country_names
+        if c == country
+            push!(multiple_nodes,n)
+        end
+    end
+    
+    Total_country_demand=0
+    for area_i in multiple_nodes      
+        for hour in 1:8760
+            if    sum(names(orig_demand) .== area_i) !=0
+                Total_country_demand += orig_demand[!, area_i][hour]
+            else
+                Total_country_demand += 0
+            end
+        end
+    end
+
+    demand_series =[]
+    if    sum(names(orig_demand) .== area) !=0
+        for hour in 1:8760
+            push!(demand_series,orig_demand[!, area][hour])
+        end
+    else
+        demand_series =  zeros(8760)
+    end
+
+
+   
+
+    # Filter for the relevant node and installed capacity
+    nodal_dem = demand[demand[!, "Country"] .== country, :]
+
+    # Filter once for the given types
+    market_dem = nodal_dem[nodal_dem[!, "Node_Type"] .== "Market", :]
+
+    # Filter for the scenario and year in one step
+    values = market_dem[(market_dem[!, "Scenario"] .== scenario) .&
+                            (parse(Int, year) .== market_dem[!,"Year"]) .&
+                            (market_dem[!,"Climate_Year"] .== climate_year), :]
+
+    # Sum the values and convert to MW
+    if isempty(values[!,"Value"])
+        final_value = 0
+    else
+        final_value = sum(values[!,"Value"])*10^6 #MWh
+    end
+
+
+
+    ratio = final_value/Total_country_demand
+    if demand_series == zeros(8760)
+        return demand_series
+    else
+        return demand_series .* ratio
+    end
+end
+
+
+
+
 # Extract generation capacity for each scenario, generation type, climate year and zone
 # Capacity: Input data frame with generation capacity
 # scenario{String}, e.g. "NT2025"
@@ -64,6 +154,10 @@ function get_generation_ratio_2024(capacity,type,node,nodes)
         i = nodes[i_idx,1]
         country_names[i] = nodes[i_idx,2]
     end
+    country_names["DKE1"] = "Denmark"
+    country_names["DKW1"] = "Denmark"
+    country_names["DKKF"] = "Denmark"
+    country_names["DEK1"] = "Denmark"
     
     country = country_names[node]
     if isempty(nodes[nodes[!,"country_text"] .== "$country", "node_id"])
@@ -164,7 +258,7 @@ function get_corrected_capacity_2024(year,scenario,g,node_id,climate_year,nodes,
     #####################
     if scenario == "DE"
         scenario = "Distributed Energy"
-    elseif scneario == "GA"
+    elseif scenario == "GA"
         scenario = "Global Ambition"
     elseif scenario == "NT"
         scenario = "National Trends"
@@ -175,42 +269,86 @@ function get_corrected_capacity_2024(year,scenario,g,node_id,climate_year,nodes,
     for i_idx in 1:length(nodes[:,1])
         i = nodes[i_idx,1]
         country_names[i] = nodes[i_idx,2]
-    end    
+    end   
+    country_names["DKE1"] = "Denmark"
+    country_names["DKW1"] = "Denmark"
+    country_names["DKKF"] = "Denmark"
+    country_names["DEK1"] = "Denmark"
+    country_names["DK00"] = "Denmark"
     country = country_names[node_id]
+
+    
+
     #####################
-    Corresponding_type = Dict{String,Any}(
-    "Battery" => [],
-    "Solar PV" => ["DRES Solar PV","Solar PV Rooftop","Solar PV Utility"],
-    "Offshore Wind" => ["DRES Wind Off","Wind Offshore"] ,
-    "Onshore Wind" => ["DRES Wind On","Wind Onshore"],
-    "Gas Conventional old 1" => ["Gas","Gas conventional"],
-    "Gas Conventional old 2" => ["Gas","Gas conventional"],
-    "Gas CCGT new"=> ["Gas CCGT"],
-    "Gas CCGT old 1"=> ["Gas CCGT"],
-    "Gas CCGT old 2"=> ["Gas CCGT"],
-    "Gas CCGT present 1"=> ["Gas CCGT"],
-    "Gas CCGT present 2" => ["Gas CCGT"],
-    "Gas CCGT CCS" => ["Gas CCGT CCS"],
-    "Gas OCGT new" =>["Gas OCGT"],
-    "Gas OCGT old" =>["Gas OCGT"],
-    "Hard coal CCS" => ["Hard coal","Hard coal biofuel"],
-    "Hard coal new" => ["Hard coal","Hard coal biofuel"],
-    "Hard coal old 1" => ["Hard coal","Hard coal biofuel"],
-    "Hard coal old 2" => ["Hard coal","Hard coal biofuel"],
-    "Heavy oil old 1" => ["Heavy oil"],
-    "Heavy oil old 2" => ["Heavy oil"],
-    "Light oil" => ["Light oil"],
-    "Lignite CCS" => ["Lignite","Lignite biofuel"],
-    "Lignite new" => ["Lignite","Lignite biofuel"],
-    "Lignite old 1" => ["Lignite","Lignite biofuel"],
-    "Lignite old 2" => ["Lignite","Lignite biofuel"],
-    "Nuclear" => ["Nuclear"],
-    "Oil shale new" => ["Oil shale biofuel"],
-    "Oil shale old" => ["Oil shale biofuel"],
-    "Other RES" => ["Other RES","Solar Thermal"],
-    "Reservoir" => ["Pondage","Reservoir"],
-    "Run-of-River" => ["Run-of-River"],
-    "Other non-RES" => ["Hydrogen CCGT","Hydrogen FC"])
+    if scenario != "National Trends"
+        Corresponding_type = Dict{String,Any}(
+        "Battery" => [],
+        "Solar PV" => ["Solar PV Utility"],
+        "Offshore Wind" => ["Wind Offshore"] ,
+        "Onshore Wind" => ["Wind Onshore"],
+        "Gas Conventional old 1" => ["Gas","Gas conventional"],
+        "Gas Conventional old 2" => ["Gas","Gas conventional"],
+        "Gas CCGT new"=> ["Gas CCGT"],
+        "Gas CCGT old 1"=> ["Gas CCGT"],
+        "Gas CCGT old 2"=> ["Gas CCGT"],
+        "Gas CCGT present 1"=> ["Gas CCGT"],
+        "Gas CCGT present 2" => ["Gas CCGT"],
+        "Gas CCGT CCS" => ["Gas CCGT CCS"],
+        "Gas OCGT new" =>["Gas OCGT"],
+        "Gas OCGT old" =>["Gas OCGT"],
+        "Hard coal CCS" => ["Hard coal","Hard coal biofuel"],
+        "Hard coal new" => ["Hard coal","Hard coal biofuel"],
+        "Hard coal old 1" => ["Hard coal","Hard coal biofuel"],
+        "Hard coal old 2" => ["Hard coal","Hard coal biofuel"],
+        "Heavy oil old 1" => ["Heavy oil"],
+        "Heavy oil old 2" => ["Heavy oil"],
+        "Light oil" => ["Light oil"],
+        "Lignite CCS" => ["Lignite","Lignite biofuel"],
+        "Lignite new" => ["Lignite","Lignite biofuel"],
+        "Lignite old 1" => ["Lignite","Lignite biofuel"],
+        "Lignite old 2" => ["Lignite","Lignite biofuel"],
+        "Nuclear" => ["Nuclear"],
+        "Oil shale new" => ["Oil shale biofuel"],
+        "Oil shale old" => ["Oil shale biofuel"],
+        "Other RES" => ["Other RES","Solar Thermal"],
+        "Reservoir" => ["Pondage","Reservoir"],
+        "Run-of-River" => ["Run-of-River"],
+        "Other non-RES" => ["Hydrogen CCGT","Hydrogen FC"])
+    elseif scenario == "National Trends"
+        Corresponding_type = Dict{String,Any}(
+        "Battery" => [],
+        "Solar PV" => ["Solar PV"],
+        "Offshore Wind" => ["Wind Offshore"] ,
+        "Onshore Wind" => ["Wind Onshore"],
+        "Gas Conventional old 1" => ["Gas","Gas conventional"],
+        "Gas Conventional old 2" => ["Gas","Gas conventional"],
+        "Gas CCGT new"=> ["Gas CCGT"],
+        "Gas CCGT old 1"=> ["Gas CCGT"],
+        "Gas CCGT old 2"=> ["Gas CCGT"],
+        "Gas CCGT present 1"=> ["Gas CCGT"],
+        "Gas CCGT present 2" => ["Gas CCGT"],
+        "Gas CCGT CCS" => ["Gas CCGT CCS"],
+        "Gas OCGT new" =>["Gas OCGT"],
+        "Gas OCGT old" =>["Gas OCGT"],
+        "Hard coal CCS" => ["Hard coal","Hard coal biofuel"],
+        "Hard coal new" => ["Hard coal","Hard coal biofuel"],
+        "Hard coal old 1" => ["Hard coal","Hard coal biofuel"],
+        "Hard coal old 2" => ["Hard coal","Hard coal biofuel"],
+        "Heavy oil old 1" => ["Heavy oil"],
+        "Heavy oil old 2" => ["Heavy oil"],
+        "Light oil" => ["Light oil"],
+        "Lignite CCS" => ["Lignite","Lignite biofuel"],
+        "Lignite new" => ["Lignite","Lignite biofuel"],
+        "Lignite old 1" => ["Lignite","Lignite biofuel"],
+        "Lignite old 2" => ["Lignite","Lignite biofuel"],
+        "Nuclear" => ["Nuclear"],
+        "Oil shale new" => ["Oil shale biofuel"],
+        "Oil shale old" => ["Oil shale biofuel"],
+        "Other RES" => ["Other RES","Solar Thermal"],
+        "Reservoir" => ["Pondage","Reservoir"],
+        "Run-of-River" => ["Run-of-River"],
+        "Other non-RES" => ["Hydrogen CCGT","Hydrogen FC"])
+    end
     gen_types = Corresponding_type[g]
 
     #############################
@@ -226,7 +364,7 @@ function get_corrected_capacity_2024(year,scenario,g,node_id,climate_year,nodes,
             nodal_gen_cy = nodal_gen_y[nodal_gen_y[!, "Climate_Year"] .== Climate_year, :]
             
             if type in nodal_gen_cy[!, "Category_Detail"]
-                corrected_capacity += nodal_gen_cy[nodal_gen_cy[!, "Category_Detail"] .== type, "Value"][1]
+                corrected_capacity += nodal_gen_cy[nodal_gen_cy[!, "Category_Detail"] .== type, "Value"][1]*1000  #OMZETTING NAAR MW
             end
         end
         if corrected_capacity == 0
@@ -416,18 +554,33 @@ function get_generation_capacity_2024_v2(data, scenario, year, type, climate_yea
     climate_year = "CY$climate_year"
     
     # Define the mapping for types
-    type_mapping = Dict(
-        "Gas CCGT new" => ["Gas", "Gas conventional", "Gas CCGT", "Gas CCGT CCS", "Gas OCGT", "Hydrogen CCGT", "Hydrogen FC"],
-        "Solar PV" => ["Solar PV Rooftop", "Solar PV Utility", "DRES Solar PV"],
-        "Onshore Wind" => ["DRES Wind On", "Wind Onshore"],
-        "Offshore Wind" => ["DRES Wind Off", "Wind Offshore"],
-        "Lignite old 1" => ["Lignite", "Lignite biofuel"],
-        "Run-of-River" => ["Run-of-River"],
-        "Hard coal old 2 Bio" => ["Hard coal", "Hard coal biofuel"],
-        "Heavy oil old 1 Bio" => ["Heavy oil", "Ligth oil", "Oil shale biofuel"],
-        "Other RES" => ["Other RES", "Solar Thermal"],
-        "Nuclear" => ["Nuclear"]
-    )
+    if scenario != "National Trends"
+        type_mapping = Dict(
+            "Gas CCGT new" => ["Gas", "Gas conventional", "Gas CCGT", "Gas CCGT CCS", "Gas OCGT", "Hydrogen CCGT", "Hydrogen FC"],
+            "Solar PV" => ["Solar PV Utility"],
+            "Onshore Wind" => ["Wind Onshore"],
+            "Offshore Wind" => ["Wind Offshore"],
+            "Lignite old 1" => ["Lignite", "Lignite biofuel"],
+            "Run-of-River" => ["Run-of-River"],
+            "Hard coal old 2 Bio" => ["Hard coal", "Hard coal biofuel"],
+            "Heavy oil old 1 Bio" => ["Heavy oil", "Ligth oil", "Oil shale biofuel"],
+            "Other RES" => ["Other RES", "Solar Thermal"],
+            "Nuclear" => ["Nuclear"]
+        )
+    else
+        type_mapping = Dict(
+            "Gas CCGT new" => ["Gas", "Gas conventional", "Gas CCGT", "Gas CCGT CCS", "Gas OCGT", "Hydrogen CCGT", "Hydrogen FC"],
+            "Solar PV" => ["Solar PV"],
+            "Onshore Wind" => ["Wind Onshore"],
+            "Offshore Wind" => ["Wind Offshore"],
+            "Lignite old 1" => ["Lignite", "Lignite biofuel"],
+            "Run-of-River" => ["Run-of-River"],
+            "Hard coal old 2 Bio" => ["Hard coal", "Hard coal biofuel"],
+            "Heavy oil old 1 Bio" => ["Heavy oil", "Ligth oil", "Oil shale biofuel","Others non-RES"],
+            "Other RES" => ["Other RES", "Solar Thermal"],
+            "Nuclear" => ["Nuclear"]
+        )
+    end
 
     # Filter for the relevant node and installed capacity
     capacity = data[data[!,"Property_Name"] .== "Installed Capacity", :]

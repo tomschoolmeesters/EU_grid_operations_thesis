@@ -1,5 +1,5 @@
 function where_curtailment()
-    start_hour = 2000;
+    start_hour = 2;
     where_curtailment = Dict()
     gen_types = Dict("Solar PV" => "solar_pv", 
                      "Onshore Wind" => "wind_onshore", 
@@ -12,7 +12,7 @@ function where_curtailment()
         # Check if the generator type is in the defined types
         if haskey(gen_types, gen_type_tyndp)
             gen_type = gen_types[gen_type_tyndp]
-            Curtailment, _ = RES_curtailment_WO(g, gen_type, nodal_result, nodal_input, timeseries_data, start_hour)
+            Curtailment, _ = RES_curtailment_WO(g, gen_type, nodal_result, nodal_input, timeseries_data_reduced, start_hour)
             
             # Only store curtailment data if the condition is met
             if mean(Curtailment .> 0.3 )> 0.3
@@ -23,10 +23,13 @@ function where_curtailment()
 
     for key in keys(where_curtailment)
         type = nodal_input["gen"]["$key"]["type_tyndp"]
-        zone = nodal_input["gen"]["$key"]["zone"]
-        bus = nodal_input["gen"]["$key"]["gen_bus"]
-        println("Generator: $key")
-        println("   Type: $type --- Zone: $zone --- Bus: $bus\n")
+        if type == "Offshore Wind"
+           
+            zone = nodal_input["gen"]["$key"]["zone"]
+            bus = nodal_input["gen"]["$key"]["gen_bus"]
+            println("Generator: $key")
+            println("   Type: $type --- Zone: $zone --- Bus: $bus\n")
+        end
     end
     if length(where_curtailment) == 0
         println("No curtailment")

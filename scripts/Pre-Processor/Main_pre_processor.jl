@@ -123,7 +123,7 @@ function PTDF_analysis_full(nodal_input,nodal_result,number_of_hours,ne_branch,n
     println("Start computing PowerFlow matrix")
     # Precompute DC to AC bus mappings for faster lookup
     dc_to_ac_map = Dict(conv["busdc_i"] => conv["busac_i"] for (_, conv) in nodal_input["convdc"])
-    ac_branch_indices = [(bus_index[branch["f_bus"]], bus_index[branch["t_bus"]], parse(Int, idx) - 200000 + 1, branch["rate_a"]) for (idx, branch) in ne_branch]
+    ac_branch_indices = [(bus_index[branch["f_bus"]], bus_index[branch["t_bus"]], parse(Int, iadx) - 200000 + 1, branch["rate_a"]) for (idx, branch) in ne_branch]
     dc_branch_indices = [(bus_index[dc_to_ac_map[branchDC["fbusdc"]]], bus_index[dc_to_ac_map[branchDC["tbusdc"]]], parse(Int, idx) - 500000 + 1 + length(ne_branch), branchDC["rateA"]) for (idx, branchDC) in ne_branchDC]
 
     for i in 1:size(PTDF_matrix, 1)
@@ -142,7 +142,7 @@ function PTDF_analysis_full(nodal_input,nodal_result,number_of_hours,ne_branch,n
     @time X_reduced_DC = MultivariateStats.transform(pca_DC, Powerflow_matrix[:,length(ne_branch)+1:end]);
 
     # Voer MiniBatchKMeans clustering uit
-    @time result_AC = kmeans(X_reduced_AC, 1500; maxiter=75)
+    @time result_AC = kmeans(X_reduced_AC, 1000; maxiter=75)
     @time result_DC = kmeans(X_reduced_DC, 200; maxiter=75)
 
     assignment_AC = result_AC.assignments;
@@ -165,10 +165,10 @@ function PTDF_analysis_full(nodal_input,nodal_result,number_of_hours,ne_branch,n
 
     clusters = DefaultDict{Int, Vector{Int}}(Vector{Int})
     for (idx, cluster_id) in enumerate(assignment_AC)
-        push!(clusters[cluster_id], idx)
+        push!(clusters[cluster_id], idx+200000-1)
     end
     for (idx, cluster_id) in enumerate(assignment_DC)
-        push!(clusters[cluster_id + 1500], idx + length(ne_branch))  # Offset voor DC indices
+        push!(clusters[cluster_id + 1000], idx + 500000 - 1)  # Offset voor DC indices
     end
 
     
@@ -186,17 +186,17 @@ function PTDF_analysis_full(nodal_input,nodal_result,number_of_hours,ne_branch,n
     Powerflow_reduced = Powerflow_matrix[:, selected_indices_sorted]
 
     println("Start computing Lambda matrix")
-    Lambda_matrix = get_dual_branch(AC_branches, nodal_result,number_of_hours,1)
+    Lambda_matrix_ext = get_dual_branch(AC_branches, result_OPF_w,number_of_hours,1)
     
     threshold = 600
-    num_above_threshold = count(x -> x > threshold, Lambda_matrix)
-    total_elements = length(Lambda_matrix)
+    num_above_threshold = count(x -> x > threshold, Lambda_matrix_ext)
+    total_elements = length(Lambda_matrix_ext)
     upper_pct = 1.0 - (num_above_threshold / total_elements)
-    winsorize_matrix!(Lambda_matrix, 0, upper_pct)
+    winsorize_matrix!(Lambda_matrix_ext, 0, upper_pct)
 
 
     println("Start computing Impact matrix")
-    @time Impact_matrix = map(h -> Powerflow_reduced .* Lambda_matrix[:, h], 1:number_of_hours)
+    @time Impact_matrix_ext = map(h -> Powerflow_reduced .* Lambda_matrix_ext[:, h], 1:number_of_hours)
     #Impact_matrix = Powerflow_matrix .* reshape(Lambda_matrix, size(PTDF_matrix,1), 1, number_of_hours)
     #Impact_matrix = Array{Float32}(undef, size(Powerflow_matrix, 1), size(Powerflow_matrix, 2), number_of_hours)
     #for h in 1:number_of_hours
@@ -210,7 +210,7 @@ end
 function pre_processor()
 
     #1: Create all possible candidates (AC & DC)
-    ne_branch, ne_branchDC, AC_new_corridor_idx, DC_new_corridor_idx = candidate_lines(nodal_input,new_DC_buses)
+    ne_branch, ne_branchDC, AC_new_corridor_idx, DC_new_corridor_idx = candidate_lines_ext(nodal_input,new_DC_buses)
 
     #2: Include cost data for every candidate (AC & DC)
     ne_branch, ne_branchDC = update_cost_data(ne_branch,ne_branchDC,nodal_input)
@@ -236,8 +236,8 @@ function pre_processor()
 
     for i in 1:length(selected_indices_AC)
         som = 0.0
-        for h in 1:length(Impact_matrix)
-            som += sum(Impact_matrix[h][:, i]) * factor[h]   #IN CASE OF REPRESENTATIVE TIMESTEPS ADD FACTOR[h]
+        for h in 1:length(Impact_matrix_ext)
+            som += sum(Impact_matrix_ext[h][:, i]) * factor[h]   #IN CASE OF REPRESENTATIVE TIMESTEPS ADD FACTOR[h]
         end
         idx = sort(selected_indices_AC)[i]
         lambda_f = []
@@ -265,8 +265,8 @@ function pre_processor()
             
     for i in 1:length(selected_indices_DC)
         som = 0.0
-        for h in 1:length(Impact_matrix)
-            som += sum(Impact_matrix[h][:, i]) * factor[h]   #IN CASE OF REPRESENTATIVE TIMESTEPS ADD FACTOR[h]
+        for h in 1:length(Impact_matrix_ext)
+            som += sum(Impact_matrix_ext[h][:, i]) * factor[h]   #IN CASE OF REPRESENTATIVE TIMESTEPS ADD FACTOR[h]
         end
         lambda_f = []
         lambda_t = []
@@ -651,12 +651,12 @@ function pre_processor()
     ImpactDC_sorted = ImpactDC[sortperm(ImpactDC[:, 2], rev = true), :]
     PIB_AC_sorted = PIB_AC[sortperm(PIB_AC[:, 2], rev = true), :]
     PIB_DC_sorted = PIB_DC[sortperm(PIB_DC[:, 2], rev = true), :]
-    n_topAC = ceil(Int, 0.025 * size(ImpactAC_sorted, 1))  # aantal bovenste elementen
-    n_topDC = ceil(Int, 0.15 * size(PIB_DC_sorted, 1))
+    n_topAC = ceil(Int, 0.05 * size(ImpactAC_sorted, 1))  # aantal bovenste elementen
+    n_topDC = ceil(Int, 0.12 * size(PIB_DC_sorted, 1))
     top_indicesAC = ImpactAC_sorted[1:n_topAC, 1] 
     top_indicesDC = PIB_DC_sorted[1:n_topDC, 1] 
     
-    random_indices_AC = rand(ImpactAC_sorted[:,1], 5)
+    random_indices_AC = rand(ImpactAC_sorted[:,1], 10)
     random_indices_DC = rand(ImpactDC_sorted[:,1], 5)
 
     final_indices = vcat(top_indicesAC,top_indicesDC,random_indices_AC,random_indices_DC)  # VOEG EVENTUEEL RANDOM INDICES TOE OM TE CHECKEN
@@ -677,13 +677,20 @@ function pre_processor()
 
     
         #4: Update zone_grid for TNEP problem
-    zone_grid = deepcopy(nodal_input)
+    zone_grid = deepcopy(nodal_input_ext)
     zone_grid["ne_branch"] = Dict{String,Any}()
     zone_grid["branchdc_ne"] = Dict{String,Any}()
 
     for i in corrected_indices_AC##keys(ne_branch)#
         zone_grid["ne_branch"]["$i"] = ne_branch["$i"]
     end
+    #=for (i,branch) in ne_branch
+        if haskey(branch, "WF_conn")
+            if branch["WF_conn"] == 1
+                zone_grid["ne_branch"]["$i"] = ne_branch["$i"]
+            end
+        end
+    end =#
     for i in corrected_indices_DC##keys(ne_branchDC)#
         zone_grid["branchdc_ne"]["$i"] = ne_branchDC["$i"]
     end

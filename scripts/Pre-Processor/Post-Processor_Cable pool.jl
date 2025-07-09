@@ -3,18 +3,18 @@ gurobi = Gurobi.Optimizer
 ### POST-PROCESSING ###
 #######################
 
-nodal_input_ext = deepcopy(nodal_input)
+nodal_input_ext2 = deepcopy(nodal_input)
 
 for (i,branch) in result["solution"]["nw"]["1"]["ne_branch"]
     if branch["built"] == 1
-        nodal_input_ext["branch"]["$i"] = Dict{String,Any}()
-        nodal_input_ext["branch"]["$i"] = zone_grid["ne_branch"]["$i"]
+        nodal_input_ext2["branch"]["$i"] = Dict{String,Any}()
+        nodal_input_ext2["branch"]["$i"] = zone_grid["ne_branch"]["$i"]
     end
 end
 for (i,branch) in result["solution"]["nw"]["1"]["branchdc_ne"]
     if branch["isbuilt"] == 1
-        nodal_input_ext["branchdc"]["$i"] = Dict{String,Any}()
-        nodal_input_ext["branchdc"]["$i"] = zone_grid["branchdc_ne"]["$i"]
+        nodal_input_ext2["branchdc"]["$i"] = Dict{String,Any}()
+        nodal_input_ext2["branchdc"]["$i"] = zone_grid["branchdc_ne"]["$i"]
     end
 end
 
@@ -40,7 +40,7 @@ result_OPF = _EUGO.batch_opf(hour_start_idx, hour_end_idx, nodal_input_ext, time
 ##########################################
 
 hour_start_idx = 1
-hour_end_idx = 36
+hour_end_idx = 15
 
 plot_filename = joinpath("results", join(["grid_input_",use_case,".pdf"]))
 _EUGO.plot_grid(nodal_input_ext, plot_filename)
@@ -56,7 +56,7 @@ result_OPF_w = _EUGO.batch_opf_repr(hour_start_idx, hour_end_idx,nodal_input_ext
 ### Calculate total objective ###
 #################################
 Total_objective = 0
-for (i,solution) in result_OPF
+for (i,solution) in nodal_result
     objective = solution["objective"]
     Total_objective += objective
 end

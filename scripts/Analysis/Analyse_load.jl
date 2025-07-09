@@ -31,4 +31,14 @@ function load_shedding(hour_range)
             end
         end
     end
+     for i in hour_range
+        for (g,gen) in nodal_result["$i"]["solution"]["gen"]
+            if nodal_input["gen"]["$g"]["type"] == "VOLL"
+                if gen["pg"] > 0
+                    bus = nodal_input["gen"]["$g"]["gen_bus"]
+                    println("Load shedding in hour $i at bus $bus: $(gen["pg"]*100) MW")
+                end
+            end
+        end         
+    end
 end
