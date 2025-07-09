@@ -46,6 +46,58 @@ function relocation_wind_farms()
     return relocation_dict
 end
 
+
+function relocation_wind_farms_ext()
+
+    file = "./data_sources/Relocation_WindFarms_EXTEND.xlsx"
+    xls = XLSX.readtable(file, "Blad1")
+    
+    data, headers = xls
+    
+    # Kolommen indexeren
+    zone_col = findfirst(==(:zone), headers) 
+    g_id_col = findfirst(==(:WindFarm), headers) 
+    lat_col = findfirst(==(:lat), headers)
+    lon_col = findfirst(==(:lon), headers)
+    name_col = findfirst(==(:name), headers)
+    p_col = findfirst(==(:power), headers)
+    ext_col = findfirst(==(:Expandable), headers)
+    year_col = findfirst(==(:Year), headers)
+    onshore_b_col = findfirst(==(:onshore_bus), headers)
+    offshore_b_col = findfirst(==(:offshore_bus), headers)
+
+    # Dictionary maken
+    relocation_dict = Dict()
+    
+    # Loop door de gegevens
+    for i in 1:length(data[1])
+        zone = data[zone_col][i] 
+        g_id = string(data[g_id_col][i])
+        
+        # Initialiseer land als het nog niet bestaat
+        if !haskey(relocation_dict, zone)
+            relocation_dict[zone] = Dict()
+        end
+        if data[year_col][i] == 2030
+            # Voeg g_id toe aan land
+            relocation_dict[zone][g_id] = Dict(
+                "gen_bus" => data[offshore_b_col][i],
+                "index" => data[g_id_col][i],
+                "lat" => data[lat_col][i],
+                "lon" => data[lon_col][i],
+                "year" => data[year_col][i],
+                "ext" => data[ext_col][i],
+                "pmax" => data[p_col][i],
+                "onshore_bus" => data[onshore_b_col][i],
+                if data[name_col][i] !== nothing
+                    "name" => data[name_col][i]
+                end
+            )
+         end
+    end
+    return relocation_dict
+end
+
 function add_OFF_DC_buses!(input_data)
     relocation_dict = relocation_wind_farms()
     DC_number = maximum([bus["index"] for (b, bus) in input_data["busdc"]]) + 1
@@ -75,6 +127,65 @@ function add_OFF_DC_buses!(input_data)
             new_DC_buses["$idx"]["lon"] = dc_bus["lon"]
             new_DC_buses["$idx"]["zone"] = zone
         end
+    end
+
+    return new_DC_buses, relocation_dict
+end  
+
+
+function add_OFF_DC_buses_ext!(input_data)
+    relocation_dict = relocation_wind_farms_ext()
+    DC_number = maximum([bus["index"] for (b, bus) in input_data["busdc"]]) + 1
+    println(DC_number)
+
+    max_groups_dict_30 = Dict(
+        "BE" => 1,
+        "DE" => 9,
+        "DK1" => 3,
+        "DK2" => 1,
+        "FR" => 4,
+        "NL" => 8,
+        "NO1" => 1,
+        "UK" => 14)
+
+    max_groups_dict_40 = Dict(
+        "BE" => 1,
+        "DE" => 4,
+        "DK1" => 2,
+        "DK2" => 3,
+        "FR" => 4,
+        "NL" => 4,
+        "NO1" => 1,
+        "UK" => 9)
+    
+
+    new_DC_buses = Dict{String,Any}()
+    for zone in keys(relocation_dict)
+        println("Clustering zone $zone")
+        max_groups_30 = max_groups_dict_30["$zone"]
+        max_groups_40 = max_groups_dict_40["$zone"]
+        DC_number, DC_bus_30= group_OFFwindfarms_ext(relocation_dict,zone,max_groups_30,max_groups_40,DC_number)
+
+        for (i,dc_bus) in DC_bus_30
+            idx = dc_bus["idx"]
+            new_DC_buses["$idx"] = Dict{String,Any}()
+            new_DC_buses["$idx"]["index"] = idx
+            new_DC_buses["$idx"]["lat"] = dc_bus["lat"]
+            new_DC_buses["$idx"]["lon"] = dc_bus["lon"]
+            new_DC_buses["$idx"]["zone"] = zone
+            new_DC_buses["$idx"]["year"] = 2030
+        end
+        #=
+        for (i,dc_bus) in DC_bus_40
+            idx = dc_bus["idx"]
+            new_DC_buses["$idx"] = Dict{String,Any}()
+            new_DC_buses["$idx"]["index"] = idx
+            new_DC_buses["$idx"]["lat"] = dc_bus["lat"]
+            new_DC_buses["$idx"]["lon"] = dc_bus["lon"]
+            new_DC_buses["$idx"]["zone"] = zone
+            new_DC_buses["$idx"]["year"] = 2040
+        end
+        =#
     end
 
     return new_DC_buses, relocation_dict
@@ -272,6 +383,258 @@ function update_input_data(input_data)
 
 end
 
+function get_clustering_rating(DC_bus,relocation_dict_zone)
+    p_cluster = 0
+    for (g,gen) in relocation_dict_zone
+        if gen["corresponding_DCbus"] == DC_bus
+            p_cluster += gen["pmax"]
+        end
+    end
+    return p_cluster
+
+end
+
+
+function update_input_data_ext(input_data, OPF_year)
+
+    new_DC_buses, relocation_dict = add_OFF_DC_buses_ext!(input_data)
+    country_dict = Dict()
+    
+    # Verzamel landen per zone in country_dict
+    for (b_id, bus) in input_data["bus"]
+        if !haskey(country_dict, bus["zone"])
+            country_dict[bus["zone"]] = bus["country"]
+        end   
+    end
+
+    # Kies een referentiebus willekeurig
+    reference_key_AC = rand(keys(input_data["bus"]))#"3935"#Base kv = 225#rand(keys(input_data["bus"]))
+    reference_key_DC = rand(keys(input_data["busdc"]))#"10168"#BAse kv =500, rand(keys(input_data["busdc"]))
+    reference_key_conv = rand(keys(input_data["convdc"]))#"32"#rand(keys(input_data["convdc"]))
+    reference_key_acbranch = rand(keys(input_data["branch"]))#"4304" #rand(keys(input_data["branch"]))
+    println("Reference key for AC: $reference_key_AC")
+    println("Reference key for DC: $reference_key_DC")
+    println("Reference key for converter: $reference_key_conv")
+    println("Reference key for ac branch: $reference_key_acbranch")
+    reference_bus_AC = deepcopy(input_data["bus"]["$reference_key_AC"])  
+    reference_bus_DC = deepcopy(input_data["busdc"]["$reference_key_DC"])
+    reference_conv = deepcopy(input_data["convdc"]["$reference_key_conv"])
+    reference_acbranch = deepcopy(input_data["branch"]["$reference_key_acbranch"])
+
+    # Verwerk de relocation_dict per zone
+    for zone in keys(relocation_dict)
+        for (g_id, gen) in relocation_dict["$zone"]  
+            new_gen_bus = relocation_dict["$zone"]["$g_id"]["gen_bus"]
+            
+            if !haskey(input_data["bus"], new_gen_bus)
+                # Verkrijg lat, lon, en naam
+                latitude = relocation_dict["$zone"]["$g_id"]["lat"]
+                longitude = relocation_dict["$zone"]["$g_id"]["lon"]
+                name = relocation_dict["$zone"]["$g_id"]["name"]
+                year = relocation_dict["$zone"]["$g_id"]["year"]
+                ext = relocation_dict["$zone"]["$g_id"]["ext"]
+                onshore_bus = relocation_dict["$zone"]["$g_id"]["onshore_bus"]
+                
+                # Voeg de nieuwe bus toe aan input_data
+                input_data["bus"]["$new_gen_bus"] = deepcopy(reference_bus_AC)
+                input_data["bus"]["$new_gen_bus"]["lat"] = latitude
+                input_data["bus"]["$new_gen_bus"]["lon"] = longitude
+                input_data["bus"]["$new_gen_bus"]["zone"] = zone
+                input_data["bus"]["$new_gen_bus"]["WF"] = 1
+                input_data["bus"]["$new_gen_bus"]["bus_i"] = new_gen_bus
+                input_data["bus"]["$new_gen_bus"]["year"] = year
+                input_data["bus"]["$new_gen_bus"]["ext"] = ext
+                input_data["bus"]["$new_gen_bus"]["onshore_bus"] = onshore_bus
+
+                # Als naam beschikbaar is, gebruik deze, anders standaard naam
+                if name !== nothing
+                    input_data["bus"]["$new_gen_bus"]["name"] = name
+                else
+                    input_data["bus"]["$new_gen_bus"]["name"] = "$zone_$new_gen_bus"
+                end
+                
+                # Stel het land in voor de bus
+                input_data["bus"]["$new_gen_bus"]["country"] = country_dict[zone]
+
+                # Als "source_id" een array is, update het tweede element
+                input_data["bus"]["$new_gen_bus"]["source_id"][2] = new_gen_bus
+                input_data["bus"]["$new_gen_bus"]["index"] = new_gen_bus
+            
+                # Update de generator als deze al bestaat
+                input_data["gen"]["$g_id"] = Dict{String,Any}()
+                input_data["gen"]["$g_id"]["gen_bus"] = new_gen_bus
+                input_data["gen"]["$g_id"]["index"] = parse(Int,g_id)
+                input_data["gen"]["$g_id"]["year"] = year
+                input_data["gen"]["$g_id"]["ext"] = ext
+                input_data["gen"]["$g_id"]["zone"] = zone
+                input_data["gen"]["$g_id"]["type_tyndp"] = "Offshore Wind"
+                input_data["gen"]["$g_id"]["model"] = 2
+                input_data["gen"]["$g_id"]["pmax"] = relocation_dict["$zone"]["$g_id"]["pmax"]/100
+                input_data["gen"]["$g_id"]["pmin"] = 0
+                input_data["gen"]["$g_id"]["ncost"] = 2
+                if year <=  2050  #OPF_year ###################################################################################################################### 
+                    input_data["gen"]["$g_id"]["gen_status"] = 1
+                else
+                    input_data["gen"]["$g_id"]["gen_status"] = 0 #NOT ACTIVE YET
+                end
+                input_data["gen"]["$g_id"]["qmin"] = -4.5
+                input_data["gen"]["$g_id"]["qmax"] = 4.5
+                input_data["gen"]["$g_id"]["vg"] = 1
+                input_data["gen"]["$g_id"]["country"] = country_dict[zone]
+                input_data["gen"]["$g_id"]["source_id"] = ["gen",new_gen_bus]
+                input_data["gen"]["$g_id"]["cost"] = [17,0]
+                input_data["gen"]["$g_id"]["type"] = "Offshore"
+            end
+        end
+    end
+    
+    #Maak nieuwe AC bussen
+    AC_number = maximum([bus["index"] for (b, bus) in input_data["bus"]]) + 1
+    Conv_number = maximum([conv["index"] for (c, conv) in input_data["convdc"]]) + 1
+    ACbranch_number = maximum([branch["index"] for (b, branch) in input_data["branch"]]) + 1
+
+    for (b_id,bus) in new_DC_buses
+
+        dc_index = bus["index"]
+        latitude = bus["lat"]
+        longitude = bus["lon"]
+        zone = bus["zone"]
+        name_AC = "$zone$AC_number"
+
+        input_data["bus"]["$AC_number"] = deepcopy(reference_bus_AC)
+        input_data["bus"]["$AC_number"]["lat"] = latitude
+        input_data["bus"]["$AC_number"]["lon"] = longitude
+        input_data["bus"]["$AC_number"]["zone"] = zone
+        input_data["bus"]["$AC_number"]["bus_i"] = AC_number
+        input_data["bus"]["$AC_number"]["WF_cluster"] = 1
+
+        # Als naam beschikbaar is, gebruik deze, anders standaard naam
+        if name_AC !== nothing
+            input_data["bus"]["$AC_number"]["name"] = name_AC
+        else
+            input_data["bus"]["$AC_number"]["name"] = "$zone$AC_number"
+        end
+        
+        # Stel het land in voor de bus
+        input_data["bus"]["$AC_number"]["country"] = country_dict[zone]
+
+        # Als "source_id" een array is, update het tweede element
+        input_data["bus"]["$AC_number"]["source_id"][2] = AC_number
+        input_data["bus"]["$AC_number"]["index"] = AC_number
+
+        
+
+        name_DC = "$zone$dc_index"
+        input_data["busdc"]["$dc_index"] = deepcopy(reference_bus_DC)
+        input_data["busdc"]["$dc_index"]["lat"] = latitude
+        input_data["busdc"]["$dc_index"]["lon"] = longitude
+        input_data["busdc"]["$dc_index"]["name"] = name_DC
+        input_data["busdc"]["$dc_index"]["source_id"][2] = dc_index
+        input_data["busdc"]["$dc_index"]["busdc_i"] = dc_index
+        input_data["busdc"]["$dc_index"]["index"] = dc_index
+        input_data["busdc"]["$dc_index"]["zone"] = country_dict[zone]
+
+        input_data["convdc"]["$Conv_number"] = deepcopy(reference_conv)
+        input_data["convdc"]["$Conv_number"]["busdc_i"] = dc_index
+        input_data["convdc"]["$Conv_number"]["busac_i"] = AC_number
+        input_data["convdc"]["$Conv_number"]["index"] = Conv_number 
+        input_data["convdc"]["$Conv_number"]["source_id"][2] = Conv_number
+        input_data["convdc"]["$Conv_number"]["interconnector"] = false
+        #input_data["convdc"]["$Conv_number"]["Pacmax"] = 40
+        #input_data["convdc"]["$Conv_number"]["Qacrated"] = 40
+        #input_data["convdc"]["$Conv_number"]["Pacrated"] = 40
+        #input_data["convdc"]["$Conv_number"]["Qacmax"] = 40
+        #input_data["convdc"]["$Conv_number"]["Qacmin"] = -40
+        #input_data["convdc"]["$Conv_number"]["Pacmax"] = 40
+        #input_data["convdc"]["$Conv_number"]["Pacmin"] = 40
+        #input_data["convdc"]["$Conv_number"]["Imax"] = 4000
+        #input_data["convdc"]["$Conv_number"]["basekVac"] = 225
+
+        AC_number += 1
+        Conv_number += 1
+    end
+
+    corr_DC_bus_set = Vector()
+    corr_DC_bus = 0
+    new_branches = Dict{String,Any}()
+    for zone in keys(relocation_dict)
+        for (g_id, gen) in relocation_dict["$zone"]
+            new_gen_bus = relocation_dict["$zone"]["$g_id"]["gen_bus"]
+            push!(corr_DC_bus_set,corr_DC_bus)
+            corr_DC_bus = relocation_dict["$zone"]["$g_id"]["corresponding_DCbus"] #corresponding_DCbus
+            DC_to_ACbus = 0
+            for (c,conv) in input_data["convdc"]
+                if conv["busdc_i"] == corr_DC_bus
+                    DC_to_ACbus = conv["busac_i"]
+                end
+            end
+            
+            input_data["gen"]["$g_id"]["AC_cluster"] = DC_to_ACbus
+            input_data["gen"]["$g_id"]["corr_DC_bus"] = corr_DC_bus
+        
+            input_data["branch"]["$ACbranch_number"] = deepcopy(reference_acbranch)
+            input_data["branch"]["$ACbranch_number"]["source_id"][2] = ACbranch_number
+            input_data["branch"]["$ACbranch_number"]["f_bus"] = new_gen_bus
+            input_data["branch"]["$ACbranch_number"]["t_bus"] = DC_to_ACbus
+            input_data["branch"]["$ACbranch_number"]["name"] = "WindFarm connector"
+            input_data["branch"]["$ACbranch_number"]["rate_a"] = 101
+            input_data["branch"]["$ACbranch_number"]["rate_b"] = 101
+            input_data["branch"]["$ACbranch_number"]["rate_c"] = 101
+            input_data["branch"]["$ACbranch_number"]["br_x"] = 0.01
+            input_data["branch"]["$ACbranch_number"]["index"] = ACbranch_number
+            input_data["branch"]["$ACbranch_number"]["interconnector"] = false
+            input_data["branch"]["$ACbranch_number"]["transformer"] = false
+            new_branches["$ACbranch_number"] = deepcopy(input_data["branch"]["$ACbranch_number"])
+            ACbranch_number +=1
+
+            if gen["year"] < 2040  ######################################################################################################################
+                if !(corr_DC_bus in corr_DC_bus_set)
+                    rating = get_clustering_rating(corr_DC_bus,relocation_dict["$zone"])/100
+                    old_gen_bus = relocation_dict["$zone"]["$g_id"]["onshore_bus"] #AC bus
+                    input_data["branch"]["$ACbranch_number"] = deepcopy(reference_acbranch)
+                    input_data["branch"]["$ACbranch_number"]["source_id"][2] = ACbranch_number
+                    input_data["branch"]["$ACbranch_number"]["name"] = "WindFarm connector"
+                    input_data["branch"]["$ACbranch_number"]["rate_a"] = rating*2.5
+                    input_data["branch"]["$ACbranch_number"]["rate_b"] = rating*2.5
+                    input_data["branch"]["$ACbranch_number"]["rate_c"] = rating*2.5
+                    input_data["branch"]["$ACbranch_number"]["br_x"] = 0.001
+                    input_data["branch"]["$ACbranch_number"]["f_bus"] = DC_to_ACbus
+                    input_data["branch"]["$ACbranch_number"]["t_bus"] = old_gen_bus
+                    input_data["branch"]["$ACbranch_number"]["index"] = ACbranch_number
+                    input_data["branch"]["$ACbranch_number"]["interconnector"] = false
+                    input_data["branch"]["$ACbranch_number"]["transformer"] = false
+                    new_branches["$ACbranch_number"] = deepcopy(input_data["branch"]["$ACbranch_number"])
+
+                    ACbranch_number +=1
+                end
+            else
+                if !(corr_DC_bus in corr_DC_bus_set)
+                    old_gen_bus = relocation_dict["$zone"]["$g_id"]["onshore_bus"] #AC bus
+                    input_data["branch"]["$ACbranch_number"] = deepcopy(reference_acbranch)
+                    input_data["branch"]["$ACbranch_number"]["source_id"][2] = ACbranch_number
+                    input_data["branch"]["$ACbranch_number"]["name"] = "WindFarm connector"
+                    input_data["branch"]["$ACbranch_number"]["rate_a"] = 0.01
+                    input_data["branch"]["$ACbranch_number"]["rate_b"] = 0.01
+                    input_data["branch"]["$ACbranch_number"]["rate_c"] = 0.01
+                    input_data["branch"]["$ACbranch_number"]["br_x"] = 0.01
+                    input_data["branch"]["$ACbranch_number"]["WF_conn"] = 1
+                    input_data["branch"]["$ACbranch_number"]["f_bus"] = DC_to_ACbus
+                    input_data["branch"]["$ACbranch_number"]["t_bus"] = old_gen_bus
+                    input_data["branch"]["$ACbranch_number"]["index"] = ACbranch_number
+                    input_data["branch"]["$ACbranch_number"]["interconnector"] = false
+                    input_data["branch"]["$ACbranch_number"]["transformer"] = false
+                    new_branches["$ACbranch_number"] = deepcopy(input_data["branch"]["$ACbranch_number"])
+
+                    ACbranch_number +=1
+                end
+                
+            end         
+        end        
+    end    
+   
+    return new_DC_buses, relocation_dict, new_branches
+end
+
 function check_OFFwind_capacities(EU_grid,zone,tyndp_version,scenario,climate_year)
 
     Years_dict = Dict{String,Any}()
@@ -357,15 +720,15 @@ function add_VOLL_generation(EU_grid)
         EU_grid["gen"]["$index"]["type_tyndp"] = "VOLL"
         EU_grid["gen"]["$index"]["model"] = 2
         EU_grid["gen"]["$index"]["gen_bus"] = load_bus
-        EU_grid["gen"]["$index"]["pmax"] = 200
+        EU_grid["gen"]["$index"]["pmax"] = 55
         EU_grid["gen"]["$index"]["country"] = country
         EU_grid["gen"]["$index"]["vg"] = 1.0
         EU_grid["gen"]["$index"]["source_id"] = ["gen", index]
         EU_grid["gen"]["$index"]["index"] = index
-        EU_grid["gen"]["$index"]["cost"] = [60, 0]
-        EU_grid["gen"]["$index"]["qmax"] = 1.77
+        EU_grid["gen"]["$index"]["cost"] = [300, 0]
+        EU_grid["gen"]["$index"]["qmax"] = 1
         EU_grid["gen"]["$index"]["gen_status"] = 1
-        EU_grid["gen"]["$index"]["qmin"] = -1.77
+        EU_grid["gen"]["$index"]["qmin"] = 0
         EU_grid["gen"]["$index"]["type"] = "VOLL"
         EU_grid["gen"]["$index"]["pmin"] = 0
         EU_grid["gen"]["$index"]["ncost"] = 2

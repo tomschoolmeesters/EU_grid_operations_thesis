@@ -6,6 +6,17 @@
 
 using Combinatorics, Statistics
 
+function get_clustering_rating(DC_bus,relocation_dict_zone)
+    p_cluster = 0
+    for (g,gen) in relocation_dict_zone
+        if gen["corresponding_DCbus"] == DC_bus
+            p_cluster += gen["pmax"]
+        end
+    end
+    return p_cluster
+
+end
+
 function median_sytem_price(nodal_result)
     average_price=[]
     for i in 1:number_of_hours
@@ -44,6 +55,7 @@ function OFF_AC_buses(nodal_input, OFF_DC_buses)
     AC_buses = unique(AC_buses)
     return AC_buses
 end
+
 
 function is_point_in_polygon(point, polygon)
     lat, lon = point
@@ -135,7 +147,7 @@ function get_AC_branch_info_full(nodal_input)
         push!(AC_buses, t_bus)
         
         # Gebruik een tuple als sleutel
-        if !((f_bus,t_bus) in keys(AC_branches))
+        if !((f_bus,t_bus) in keys(AC_branches)) && !((t_bus,f_bus) in keys(AC_branches))
             
             AC_branches[(f_bus, t_bus)] = Dict()
             AC_branches[(f_bus, t_bus)]["br_x"] = branch["br_x"]
@@ -808,9 +820,9 @@ function candidate_lines(nodal_input,OFF_dc_buses; offshore_hubs = false)
             ne_branch["$Branch_idx"] = exis_branch
             ne_branch["$Branch_idx"]["source_id"][2] = Branch_idx
             ne_branch["$Branch_idx"]["index"] = Branch_idx
-            ne_branch["$Branch_idx"]["rate_a"] = 20
-            ne_branch["$Branch_idx"]["rate_b"] = 20 
-            ne_branch["$Branch_idx"]["rate_c"] = 20
+            ne_branch["$Branch_idx"]["rate_a"] = 15
+            ne_branch["$Branch_idx"]["rate_b"] = 15 
+            ne_branch["$Branch_idx"]["rate_c"] = 15
             Branch_idx = Branch_idx + 1
         end
     end
@@ -821,9 +833,9 @@ function candidate_lines(nodal_input,OFF_dc_buses; offshore_hubs = false)
         ne_branch["$Branch_idx"] = exis_branch
         ne_branch["$Branch_idx"]["f_bus"] = Int(bus1)
         ne_branch["$Branch_idx"]["t_bus"] = Int(bus2)
-        ne_branch["$Branch_idx"]["rate_a"] = 20
-        ne_branch["$Branch_idx"]["rate_b"] = 20 
-        ne_branch["$Branch_idx"]["rate_c"] = 20
+        ne_branch["$Branch_idx"]["rate_a"] = 15
+        ne_branch["$Branch_idx"]["rate_b"] = 15 
+        ne_branch["$Branch_idx"]["rate_c"] = 15
         ne_branch["$Branch_idx"]["source_id"][2] = Int(Branch_idx)
         ne_branch["$Branch_idx"]["index"] = Int(Branch_idx)
         Branch_idx = Branch_idx + 1
@@ -843,9 +855,9 @@ function candidate_lines(nodal_input,OFF_dc_buses; offshore_hubs = false)
             ne_branchDC["$Branch_idx"] = exis_branch
             ne_branchDC["$Branch_idx"]["source_id"][2] = Branch_idx
             ne_branchDC["$Branch_idx"]["index"] = Branch_idx
-            ne_branchDC["$Branch_idx"]["rateA"] = 50
-            ne_branchDC["$Branch_idx"]["rateB"] = 50 
-            ne_branchDC["$Branch_idx"]["rateC"] = 50
+            ne_branchDC["$Branch_idx"]["rateA"] = 20
+            ne_branchDC["$Branch_idx"]["rateB"] = 20 
+            ne_branchDC["$Branch_idx"]["rateC"] = 20
             ne_branchDC["$Branch_idx"]["name"] = "New DC branch (exis)"
             Branch_idx = Branch_idx + 1
         end
@@ -857,9 +869,243 @@ function candidate_lines(nodal_input,OFF_dc_buses; offshore_hubs = false)
         ne_branchDC["$Branch_idx"] = exis_branch
         ne_branchDC["$Branch_idx"]["fbusdc"] = Int(bus1)
         ne_branchDC["$Branch_idx"]["tbusdc"] = Int(bus2)
-        ne_branchDC["$Branch_idx"]["rateA"] = 50
-        ne_branchDC["$Branch_idx"]["rateB"] = 50 
-        ne_branchDC["$Branch_idx"]["rateC"] = 50
+        ne_branchDC["$Branch_idx"]["rateA"] = 20
+        ne_branchDC["$Branch_idx"]["rateB"] = 20 
+        ne_branchDC["$Branch_idx"]["rateC"] = 20
+        ne_branchDC["$Branch_idx"]["source_id"][2] = Int(Branch_idx)
+        ne_branchDC["$Branch_idx"]["index"] = Int(Branch_idx)
+        ne_branchDC["$Branch_idx"]["name"] = "New DC branch (new)"
+        Branch_idx = Branch_idx + 1
+    end
+
+    return ne_branch, ne_branchDC, AC_new_corridor_idx, DC_new_corridor_idx
+end
+
+##
+
+function candidate_lines_ext(nodal_input,OFF_dc_buses; offshore_hubs = false)
+    OFF_ac_buses = OFF_AC_buses(nodal_input, OFF_dc_buses)
+
+    if offshore_hubs
+        OFF_hubs_buses = []
+        for (b,bus) in nodal_input["busdc"]
+            if bus["name"] in ["OFF1","OFF2","OFF3","OFF4","OFF5"]
+                push!(OFF_hubs_buses, bus["index"])
+            end
+        end
+        OFF_dc_buses = vcat(OFF_dc_buses, OFF_hubs_buses)
+    end
+    updated_OFF_DC_buses = update_connectionzone(OFF_dc_buses)
+    
+    ################################
+    ### Initialise Candidate Set ###
+    ################################
+
+    CL_exisAC =  Vector{Tuple{Float64, Float64}}()
+    CL_exisDC =  Vector{Tuple{Float64, Float64}}()
+    CL_newAC = Vector{Tuple{Float64, Float64}}()
+    CL_newDC = Vector{Tuple{Float64, Float64}}()
+    CL_newDC_OFF = Vector{Tuple{Float64, Float64}}()
+
+    ################################
+    ### Reinforce existing lines ###
+    ################################
+
+    for (b,branch) in nodal_input["branch"]
+        FromBus = branch["f_bus"]
+        ToBus = branch["t_bus"]
+        push!(CL_exisAC,(FromBus,ToBus))
+    end
+
+    for (b,dc_branch) in nodal_input["branchdc"]
+        FromBus = dc_branch["fbusdc"]
+        ToBus = dc_branch["tbusdc"]
+        push!(CL_exisDC,(FromBus,ToBus))
+    end
+
+    #############################
+    ###  Create new corridors ###
+    #############################
+
+    bus_AC = Vector{Float64}() #Dictionary of all AC buses in the zones
+    bus_DC = Vector{Float64}() #Dictionary of all DC buses in the zones
+    bus_OFF_DC = Vector{Float64}() #Dictionary of all DC offshore buses in the zones
+    new_OFFconn_AC = Vector{Tuple{Float64, Float64}}()
+
+
+    for bus in keys(nodal_input["bus"])
+        bus = parse(Int,bus)
+        if !(bus in OFF_ac_buses)
+            #bus_zone = nodal_input["bus"]["$bus"]["zone"]
+            push!(bus_AC,bus)
+        else
+            for (g,gen) in nodal_input["gen"]
+                if gen["gen_bus"] == bus && gen["year"] == 2040
+                    println("Offshore connection AC: ",gen["AC_cluster"]," - ",nodal_input["bus"]["$bus"]["onshore_bus"])
+                    push!(new_OFFconn_AC,(gen["AC_cluster"],nodal_input["bus"]["$bus"]["onshore_bus"]))
+                end
+            end
+        end
+    end
+    bus_AC = unique(bus_AC)
+    
+
+    for dc_bus in keys(nodal_input["busdc"])
+        dc_bus = parse(Int64,dc_bus)
+       
+        if !("$dc_bus" in keys(updated_OFF_DC_buses))
+            push!(bus_DC,dc_bus)
+        else
+            push!(bus_OFF_DC,dc_bus)
+        end
+    end
+    bus_DC = unique(bus_DC)
+    bus_OFF_DC = unique(bus_OFF_DC)
+
+
+    for (bus1, bus2) in combinations(bus_AC, 2)  # Alle unieke AC-AC combinaties
+        if !((bus1, bus2) in CL_exisAC) && !((bus2, bus1) in CL_exisAC)
+            bus1_int = Int(bus1)
+            bus2_int = Int(bus2)
+            zone1 = nodal_input["bus"]["$bus1_int"]["zone"]
+            zone2 = nodal_input["bus"]["$bus2_int"]["zone"]
+            if _EUGO.latlon2distance(nodal_input,Int(bus1),Int(bus2)) <= 100
+                if !(zone1 == "UK" && zone2 != "UK") && !(zone2 == "UK" && zone1 != "UK")
+                    
+                    push!(CL_newAC,(bus1,bus2))
+                end
+            end
+        end
+    end
+    #CL_newAC = vcat(CL_newAC, new_OFFconn_AC)
+
+    for (bus1, bus2) in combinations(bus_DC, 2)  # Alle unieke DC-DC combinaties
+        if !((bus1, bus2) in CL_exisDC) && !((bus2, bus1) in CL_exisDC)
+            push!(CL_newDC,(bus1,bus2))
+        end
+    end
+
+    for (bus1, bus2) in combinations(bus_OFF_DC, 2)  # Alle unieke DC-DC Offshore combinaties
+        if !((bus1, bus2) in CL_exisDC) && !((bus2, bus1) in CL_exisDC)
+            push!(CL_newDC_OFF,(bus1,bus2))
+        end
+    end
+
+    ###########################
+    ### Create new branches ###
+    ###########################
+
+    ne_branch = Dict{String,Any}()
+    Branch_idx = 200000
+    for (bus1,bus2) in CL_exisAC
+        exis_branch = nothing
+        for b in keys(nodal_input["branch"])
+            if (nodal_input["branch"][b]["f_bus"] == bus1 && nodal_input["branch"][b]["t_bus"] == bus2) || (nodal_input["branch"][b]["f_bus"] == bus2 && nodal_input["branch"][b]["t_bus"] == bus1)
+                exis_branch = deepcopy(nodal_input["branch"][b])
+            end
+        end
+
+        if exis_branch !== nothing && exis_branch["rate_a"] !== 0.01
+            ne_branch["$Branch_idx"] = exis_branch
+            ne_branch["$Branch_idx"]["source_id"][2] = Branch_idx
+            ne_branch["$Branch_idx"]["index"] = Branch_idx
+            if exis_branch["f_bus"] >= 50000 || exis_branch["t_bus"] >= 50000
+                ne_branch["$Branch_idx"]["rate_a"] = 30
+                ne_branch["$Branch_idx"]["rate_b"] = 30
+                ne_branch["$Branch_idx"]["rate_c"] = 30
+            else         
+                ne_branch["$Branch_idx"]["rate_a"] = 15
+                ne_branch["$Branch_idx"]["rate_b"] = 15 
+                ne_branch["$Branch_idx"]["rate_c"] = 15
+            end
+            Branch_idx = Branch_idx + 1
+        elseif exis_branch !== nothing && exis_branch["rate_a"] == 0.01
+            bus1 = Int(bus1)
+            rating = 30.01
+            for (c,conv) in nodal_input["convdc"]
+                if conv["busac_i"] == bus1
+                    corr_DC = conv["busdc_i"]
+                    zone_bus = nodal_input["bus"]["$bus1"]["zone"] 
+                    rating = get_clustering_rating(corr_DC,relocation_dict["$zone_bus"])/100 
+                    println(rating)    
+                end
+            end 
+            ne_branch["$Branch_idx"] = exis_branch
+            ne_branch["$Branch_idx"]["source_id"][2] = Branch_idx
+            ne_branch["$Branch_idx"]["index"] = Branch_idx
+            ne_branch["$Branch_idx"]["rate_a"] = rating
+            ne_branch["$Branch_idx"]["rate_b"] = rating
+            ne_branch["$Branch_idx"]["rate_c"] = rating
+            Branch_idx = Branch_idx + 1
+        end
+    end
+
+    AC_new_corridor_idx = Branch_idx
+    for (bus1,bus2) in CL_newAC
+        exis_branch = deepcopy(nodal_input["branch"]["371"])
+        if bus1 >= 50000
+            bus1 = Int(bus1)
+            rating = 15
+            for (c,conv) in nodal_input["convdc"]
+                if conv["busac_i"] == bus1
+                    corr_DC = conv["busdc_i"]
+                    zone_bus = nodal_input["bus"]["$bus1"]["zone"] 
+                    rating = get_clustering_rating(corr_DC,relocation_dict["$zone_bus"])/100     
+                end
+            end   
+            ne_branch["$Branch_idx"] = exis_branch
+            ne_branch["$Branch_idx"]["f_bus"] = Int(bus1)
+            ne_branch["$Branch_idx"]["t_bus"] = Int(bus2)
+            ne_branch["$Branch_idx"]["rate_a"] = rating
+            ne_branch["$Branch_idx"]["rate_b"] = rating
+            ne_branch["$Branch_idx"]["rate_c"] = rating
+            ne_branch["$Branch_idx"]["source_id"][2] = Int(Branch_idx)
+            ne_branch["$Branch_idx"]["index"] = Int(Branch_idx)
+            Branch_idx = Branch_idx + 1
+        else            
+            ne_branch["$Branch_idx"] = exis_branch
+            ne_branch["$Branch_idx"]["f_bus"] = Int(bus1)
+            ne_branch["$Branch_idx"]["t_bus"] = Int(bus2)
+            ne_branch["$Branch_idx"]["rate_a"] = 10
+            ne_branch["$Branch_idx"]["rate_b"] = 10 
+            ne_branch["$Branch_idx"]["rate_c"] = 10
+            ne_branch["$Branch_idx"]["source_id"][2] = Int(Branch_idx)
+            ne_branch["$Branch_idx"]["index"] = Int(Branch_idx)
+            Branch_idx = Branch_idx + 1
+        end
+    end
+
+    ne_branchDC = Dict{String,Any}()
+    Branch_idx = 500000
+    for (bus1,bus2) in CL_exisDC
+        exis_branch = nothing
+        for b in keys(nodal_input["branchdc"])
+            if (nodal_input["branchdc"][b]["fbusdc"] == Int(bus1) && nodal_input["branchdc"][b]["tbusdc"] ==Int(bus2)) || (nodal_input["branchdc"][b]["fbusdc"] == Int(bus2) && nodal_input["branchdc"][b]["tbusdc"] == Int(bus1))
+                exis_branch = deepcopy(nodal_input["branchdc"][b])
+            end
+        end
+
+        if exis_branch !== nothing
+            ne_branchDC["$Branch_idx"] = exis_branch
+            ne_branchDC["$Branch_idx"]["source_id"][2] = Branch_idx
+            ne_branchDC["$Branch_idx"]["index"] = Branch_idx
+            ne_branchDC["$Branch_idx"]["rateA"] = 20
+            ne_branchDC["$Branch_idx"]["rateB"] = 20 
+            ne_branchDC["$Branch_idx"]["rateC"] = 20
+            ne_branchDC["$Branch_idx"]["name"] = "New DC branch (exis)"
+            Branch_idx = Branch_idx + 1
+        end
+    end
+    DC_new_corridor_idx = Branch_idx
+    for (bus1,bus2) in CL_newDC_OFF
+        exis_branch = deepcopy(nodal_input["branchdc"]["44"])
+
+        ne_branchDC["$Branch_idx"] = exis_branch
+        ne_branchDC["$Branch_idx"]["fbusdc"] = Int(bus1)
+        ne_branchDC["$Branch_idx"]["tbusdc"] = Int(bus2)
+        ne_branchDC["$Branch_idx"]["rateA"] = 40
+        ne_branchDC["$Branch_idx"]["rateB"] = 40 
+        ne_branchDC["$Branch_idx"]["rateC"] = 40
         ne_branchDC["$Branch_idx"]["source_id"][2] = Int(Branch_idx)
         ne_branchDC["$Branch_idx"]["index"] = Int(Branch_idx)
         ne_branchDC["$Branch_idx"]["name"] = "New DC branch (new)"
@@ -873,11 +1119,11 @@ end
 function update_cost_data(ne_branch,ne_branchDC,nodal_input)
     AC_cost_MWkm = 0.0012
     DC_cost_MWkm = 0.00234
-    interest = 0.07
+    interest = 0.05
     lifetime_AC = 40
     lifetime_DC = 30
-    annuity_AC = 1/(((1+interest)^(lifetime_AC-1))/((1+interest)^(lifetime_AC*interest)))
-    annuity_DC = 1/(((1+interest)^(lifetime_DC-1))/((1+interest)^(lifetime_DC*interest)))
+    annuity_AC = interest/(1-(1+interest)^(-lifetime_AC))
+    annuity_DC = interest/(1-(1+interest)^(-lifetime_DC))
 
     for (b,branch) in ne_branch
         f_bus = branch["f_bus"]

@@ -74,9 +74,9 @@ end
 ### CONGESTION INDEX ###
 # Compute the congestion index and plot it given the optimization result you want to analyse
 
-function Congestion_index(hour_range)
+function Congestion_index(result)
     Congestion_index_values=Dict()
-    for i in 1:100
+    for i in 1:15
         if result["$i"]["objective"] !== nothing
             lambda=[]
             for bus in keys(result["$i"]["solution"]["bus"])
@@ -96,6 +96,31 @@ function Congestion_index(hour_range)
     return Congestion_index_values#,lambda
 
 end
+
+
+function overall_congestion_index(result)
+    lambda = []
+    for bus in keys(result["1"]["solution"]["bus"])
+        lambda_bus = 0.0
+        for i in 1:length(result)
+            lambda_bus += result["$i"]["solution"]["bus"]["$bus"]["lam_kcl_r"]*factor[i]/8760
+        end
+        push!(lambda,lambda_bus)
+    end
+    for dc_bus in keys(result["1"]["solution"]["busdc"])
+        lambda_dc_bus = 0.0
+        for i in 1:length(result)
+            lambda_dc_bus += result["$i"]["solution"]["busdc"]["$dc_bus"]["lam_kcl_r"]*factor[i]/8760
+        end
+        push!(lambda,lambda_dc_bus)
+    end
+    N = length(result["1"]["solution"]["bus"])+length(result["1"]["solution"]["busdc"])
+    lambda_average = sum(lambda)/N
+
+    I_c = sum(abs.(lambda.-lambda_average))/(N*abs(lambda_average))
+    return I_c
+end
+
 
 function plot_Congestion_index(result)
     Congestion_index_values = Congestion_index(result)
@@ -130,6 +155,6 @@ function plot_Saturation_index(result,input)
     sorted_keys = sort(collect(keys(Saturation_index_values)), by=x -> parse(Int, x))
     sorted_values = [Saturation_index_values[k] for k in sorted_keys]
 
-    plot(sorted_keys,sorted_values,label="")
+    Plots.plot(sorted_keys,sorted_values,label="")
     ylabel!("Saturation Index Value")
 end

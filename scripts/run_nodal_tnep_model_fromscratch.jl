@@ -21,7 +21,7 @@ include("Pre-Processor/Pre-Processor_Cable pool.jl")
 ### Plot candidates ###
 #######################
 
-plot_filename = joinpath("results", join(["grid_input_candidates_tnep",use_case,".pdf"]))
+plot_filename = joinpath("results", join(["grid_input_candidates_tnep_test",use_case,".pdf"]))
 plot_grid_candidates(zone_grid,plot_filename)
 
 ################################
@@ -52,7 +52,7 @@ s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => true, "fi
 ### Representative timestep simulation ###
 ##########################################
 
-hours = 1:24
+hours = 1:15
 # Create dictionary for writing out results
 print("######################################", "\n")
 print("####### PREPARING DATA      ##########", "\n")
@@ -63,7 +63,7 @@ print("####### STARTING OPTIMISATION ########", "\n")
 
 gurobi = JuMP.optimizer_with_attributes(
     Gurobi.Optimizer,
-    "MIPGap" => 0.05,
+    "MIPGap" => 0.15,
     "DualReductions"  => 0,
     "FeasibilityTol" => 1e-6,
     "MIPFocus" => 3) 
@@ -76,8 +76,8 @@ s = Dict("output" => Dict("branch_flows" => true), "conv_losses_mp" => true, "fi
 #############################
 ### Plot built candidates ###
 #############################
-plot_filename = joinpath("results", join(["grid_input_tnep2",use_case,".pdf"]))
-plot_grid_tnep(zone_grid,plot_filename)
+plot_filename = joinpath("results", join(["grid_input_tnep_detailed",use_case,".pdf"]))
+plot_grid_tnep(zone_grid,plot_filename,result)
 
 
 ####################

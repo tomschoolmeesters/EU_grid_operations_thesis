@@ -54,8 +54,8 @@ solver = JuMP.optimizer_with_attributes(Gurobi.Optimizer, "OutputFlag" => 0)
 tyndp_version = "2024"
 fetch_data = true
 number_of_hours = 8760
-scenario = "DE"
-year = "2040"
+scenario = "NT"
+year = "2030"
 climate_year = "2008"
 start_hour = 1
 
@@ -66,9 +66,13 @@ if fetch_data == true
   ntcs, nodes, arcs, capacity, demand, gen_types, gen_costs, emission_factor, inertia_constants, node_positions = _EUGO.get_grid_data(tyndp_version, scenario, year, climate_year,"zonal")
 end
 
+
+gen_costs["Offshore Wind"] = 17
+gen_costs["VOLL"] = 300
+
 # Construct input data dictionary in PowerModels style 
 scenario_id = "$scenario$year"                          
-input_data, nodal_data = _EUGO.construct_data_dictionary(tyndp_version, ntcs, arcs, capacity, nodes, demand, scenario_id, climate_year, gen_types, pv, wind_onshore, wind_offshore, gen_costs, emission_factor, inertia_constants, node_positions)
+input_data, nodal_data = construct_data_dictionary(tyndp_version, ntcs, arcs, capacity, nodes, demand, scenario_id, climate_year, gen_types, pv, wind_onshore, wind_offshore, gen_costs, emission_factor, inertia_constants, node_positions)
 
 input_data_raw = deepcopy(input_data)
 

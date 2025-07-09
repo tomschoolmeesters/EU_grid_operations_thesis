@@ -26,7 +26,7 @@ function find_extreme_scenarios(demand, renewables, offshore, other_res, demand_
 end
 
 
-function get_reduced_timeseries(timeseries_data, option; demand_quantile=0.85, renewables_quantile_high=0.9, renewables_quantile_low=0.1, offshore_quantile_high = 0.75, other_res_quantile_low = 0.5, demand_w_quantile_low = 0.35, demand_nw_quantile_high = 0.65,num_clusters=11)
+function get_reduced_timeseries(timeseries_data, option; demand_quantile=0.8, renewables_quantile_high=0.8, renewables_quantile_low=0.3, offshore_quantile_high = 0.75, other_res_quantile_low = 0.5, demand_w_quantile_low = 0.35, demand_nw_quantile_high = 0.65,num_clusters=11)
 
     solar_pv_BE = timeseries_data["solar_pv"]["BE"]
     solar_pv_NL = timeseries_data["solar_pv"]["NL"]

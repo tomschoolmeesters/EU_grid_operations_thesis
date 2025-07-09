@@ -24,21 +24,23 @@ using Clustering
 using StatsBase
 using SparseArrays
 import StatsPlots
+using PlotlyJS
 
 ######### DEFINE INPUT PARAMETERS
 tyndp_version = "2024"
-scenario = "DE"
-year = "2040"
+scenario = "NT"
+year = "2030"
 climate_year = "2008"
 load_data = true
 use_case = "North_Sea_reloc"
 hour_start = 1
 hour_end = 8760
-isolated_zones = ["BE","NL","UK","DE","DK1"]#,"DK2"]#,"UK","DE","NL"]#["BE","FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]
+isolated_zones = ["BE","NL","DE","DK1","UK"]#,"DK2"]#,"UK","DE","NL"]#["BE","FR","UK","DE","NL","DK2","DK1","NO1","NO2","NO3","NO4","NO5"]
 relocate_wind = true
 update_conv = true
 add_VOLL = true
-add_offshore_hubs = true
+add_offshore_hubs = false
+detailed_WF = true
 
 ############ LOAD EU grid data ############
 file = "./data_sources/European_grid_no_nseh.json"
@@ -48,14 +50,45 @@ EU_grid = _PM.parse_file(file)
 EU_grid["bus"]["6120"]["zone"] = "XB_node"
 EU_grid["bus"]["6121"]["zone"] = "XB_node"
 EU_grid["bus"]["6122"]["zone"] = "XB_node"
+EU_grid["bus"]["6122"]["lat"] = 49
 EU_grid["bus"]["6123"]["zone"] = "XB_node"
 EU_grid["bus"]["6124"]["zone"] = "XB_node"
-if relocate_wind
+EU_grid["gen"]["0"] = deepcopy(EU_grid["gen"]["26"])
+EU_grid["gen"]["0"]["type_tyndp"] = "Nuclear"
+EU_grid["gen"]["0"]["gen_bus"] = 132
+EU_grid["gen"]["0"]["source_id"][2] = 0
+EU_grid["gen"]["0"]["index"] = 0
+EU_grid["gen"]["0"]["type"] = "Nuclear"
+
+if relocate_wind && detailed_WF
+  for (g,gen) in EU_grid["gen"]
+    if gen["type_tyndp"] == "Offshore Wind" 
+      pop!(EU_grid["gen"], g)
+    end
+  end
+  pop!(EU_grid["bus"],"467")
+  pop!(EU_grid["busdc"],"10005")
+  pop!(EU_grid["busdc"],"10007")
+  pop!(EU_grid["convdc"],"6")
+  pop!(EU_grid["convdc"],"7")
+  pop!(EU_grid["branchdc"],"3")
+  pop!(EU_grid["branchdc"],"4")
+  pop!(EU_grid["branchdc"],"21")
+  pop!(EU_grid["branchdc"],"22")
+  pop!(EU_grid["busdc"],"10041")
+  pop!(EU_grid["busdc"],"10043")
+  pop!(EU_grid["convdc"],"24")
+  pop!(EU_grid["convdc"],"25")
+  pop!(EU_grid["bus"],"492")
+  new_DC_buses, relocation_dict, new_branches = update_input_data_ext(EU_grid,parse(Int,year))
+elseif relocate_wind && !detailed_WF
   new_DC_buses, relocation_dict, new_branches = update_input_data(EU_grid)
 end
+
 if add_offshore_hubs
   add_offshore_hub(EU_grid)
 end
+
 if add_VOLL
   EU_grid = add_VOLL_generation(EU_grid)
 end
@@ -88,6 +121,7 @@ file_name = joinpath("results", join([scenario,"_",year,"_",climate_year]))
     zonal_result["$j"] = deepcopy(data["$j"]["solution"]["branch"])
   end
 end
+
 BASE_DIR = "C:\\Users\\tomsc\\.julia\\dev\\EU_grid_operations_thesis"
 input_file_name =    joinpath(BASE_DIR, "results", "TYNDP2024", "input_zonal_tyndp_"*scenario*year*"_"*climate_year*".json")
 scenario_file_name = joinpath(BASE_DIR, "results", "TYNDP2024", "scenario_zonal_tyndp_"*scenario*year*"_"*climate_year*".json")
@@ -120,13 +154,35 @@ country_names =  Dict{String,Any}()
         i = zones[i_idx,1]
         country_names[i] = zones[i_idx,2]
     end
-@time scale_generation24!(tyndp_capacity, EU_grid, scenario_id, climate_year, zone_mapping)
+    country_names["DKE1"] = "Denmark"
+    country_names["DKW1"] = "Denmark"
+    country_names["DKKF"] = "Denmark"
+    country_names["DEKF"] = "Denmark"
+    country_names["DK00"] = "Denmark"
+    country_names["UKNI"] = "United Kingdom"
+    country_names["GR03"] = "Greece"
+    country_names["FR15"] = "France"
 
+for (z,zone) in EU_grid["zonal_generation_capacity"]
+  zonal_generation_capacity = 0
+  for (g,gen) in EU_grid["gen"]
+    if gen["zone"] == zone["zone"] && gen["type_tyndp"] == "Offshore Wind" && gen["year"] == 2030
+      #println(zone["zone"],g,gen["pmax"])
+      zonal_generation_capacity += gen["pmax"]
+    end
+  end
+  println("Zonal generation capacity for zone ", zone["zone"], " is ", zonal_generation_capacity)
+  zone["Offshore Wind"] = zonal_generation_capacity
+end
+ EU_grid["zonal_generation_capacity"]["4"]["Nuclear"] = EU_grid["gen"]["0"]["pmax"]
+      
+@time scale_generation24!(tyndp_capacity, EU_grid, scenario_id, climate_year, zone_mapping)
+  
 # Isolate zone: input is vector of strings, if you need to relax the fixing border flow assumptions use:
 # _EUGO.isolate_zones(EU_grid, ["DE"]; border_slack = x), this will leas to (1-slack)*xb_flow_ref < xb_flow < (1+slack)*xb_flow_ref
-zone_grid = _EUGO.isolate_zones(EU_grid, isolated_zones, border_slack = 0) #you allow a 3% slack compared to the power flows computed through the zonal model, which might leave a bit more freedom to the optimizer compared to a strict equality constraint on the flow
+zone_grid = _EUGO.isolate_zones(EU_grid, isolated_zones, border_slack = 0.03) #you allow a 3% slack compared to the power flows computed through the zonal model, which might leave a bit more freedom to the optimizer compared to a strict equality constraint on the flow
 
-plot_filename = joinpath("results", join(["grid_input_OPF",use_case,".pdf"]))
+plot_filename = joinpath("results", join(["grid_input_OPF_WF",use_case,".pdf"]))
 plot_grid(zone_grid,plot_filename)
 
 
@@ -189,11 +245,22 @@ for (b,border) in zone_grid["borders"]
       busdc = convdc["busdc_i"]
       for (b,branchdc) in zone_grid["branchdc"]
         if branchdc["fbusdc"] == busdc || branchdc["tbusdc"] == busdc
-          branchdc["rateA"] = branchdc["rateA"] *10
-          branchdc["rateB"] = branchdc["rateB"] *10
-          branchdc["rateC"] = branchdc["rateC"] *10
+          branchdc["rateA"] = branchdc["rateA"] *5
+          branchdc["rateB"] = branchdc["rateB"] *5
+          branchdc["rateC"] = branchdc["rateC"] *5
         end
       end
+    end
+  end
+end
+
+for (b,border) in zone_grid["borders"]
+  if !isempty(border["xb_lines"])
+    for (l,line) in border["xb_lines"]
+          zone_grid["branch"]["$l"]["rate_a"] = zone_grid["branch"]["$l"]["rate_a"] *10
+          zone_grid["branch"]["$l"]["rate_b"] = zone_grid["branch"]["$l"]["rate_b"] *10
+          zone_grid["branch"]["$l"]["rate_c"] = zone_grid["branch"]["$l"]["rate_c"] *10
+          zone_grid["branch"]["$l"]["br_x"] = zone_grid["branch"]["$l"]["br_x"] /10
     end
   end
 end
@@ -207,14 +274,18 @@ timeseries_data_reduced, factor, extreme_indices = get_reduced_timeseries(timese
 
 # This function will create a dictionary with all hours as result but with representative timesteps
 hour_start_idx = 1
-hour_end_idx = 24
+hour_end_idx = 15
 
 s_dual = Dict("output" => Dict("branch_flows" => true,"duals" => true), "conv_losses_mp" => true,"fix_cross_border_flows" => true)
 
+for (l,load) in zone_grid["load"]
+  load["cost_curt"] = 300
+end
 
 result = _EUGO.batch_opf_repr(hour_start_idx, hour_end_idx,zone_grid, timeseries_data_reduced, factor, gurobi, s_dual)
   
-
+nodal_result = deepcopy(result)
+nodal_input = deepcopy(zone_grid)
 
 ##############################
 ### Saving results as json ###
@@ -262,3 +333,117 @@ open(scenario_file_name,"w") do f
   JSON.print(f, json_string)
 end
 
+
+#############
+### PLOTS ###
+Plots.plot(timeseries_data_reduced["solar_pv"]["BE"], 
+     label="Solar PV", 
+      linewidth = 2,
+     color=:darkgoldenrod1,
+     size = (800,500))
+
+Plots.plot!(timeseries_data_reduced["wind_offshore"]["BE"], 
+      label="Wind Offshore", 
+       linewidth = 2,
+      color=:royalblue3)
+
+Plots.plot!(timeseries_data_reduced["wind_onshore"]["BE"], 
+      label="Wind Onshore", 
+       linewidth = 2,
+      color=:purple1,
+      grid = false)
+
+# Voeg titel, x-as label en legenda toe
+#title!("RES timeseries (01/02/2030)")
+xlabel!("Scenario")
+xticks!(1:1:15)
+ylabel!("Capacity Factor")
+Plots.plot!(ylims=(0,1))
+Plots.savefig("res_timeseries_reduced.png")
+#legend(:topright)
+
+
+Plots.plot(timeseries_data["demand"]["BE"][744:767], 
+     label="01/02/2030", 
+      linewidth = 2,
+     color=:orangered3,
+     size = (800,500))
+
+
+Plots.plot!(timeseries_data["demand"]["BE"][5088:5111], 
+     label="01/08/2030", 
+      linewidth = 2,
+     color=:chartreuse4,
+     size = (800,500))
+
+# Voeg titel, x-as label en legenda toe
+title!("Demand timeseries")
+xlabel!("Hour")
+ylabel!("Load Factor")
+Plots.plot!(ylims=(0,1))
+Plots.savefig("dem_timeseries.png")
+
+
+
+
+number_of_hours_z = 8760
+hour_start_idx = 1
+batch_size = 876 
+iterations = Int(number_of_hours_z/ batch_size)
+zonal_result = Dict{String,Any}()
+file_name = joinpath("results", join([scenario,"_",year,"_",climate_year]))
+RES = 0
+Solar_z = 0
+Onshore_z = 0
+  Offshore = 0
+  generation = 0
+  gen_BE = 0
+  gen_UK = 0
+  gen_NL = 0
+  gen_DE = 0
+  gen_DK = 0
+@time for idx in 1 : iterations
+  hs_idx = Int((hour_start_idx - 1) + (idx - 1) * batch_size + 1) 
+  he_idx = Int((hour_start_idx - 1) + idx * batch_size)
+  
+  opf_file_name = join([file_name, "_zonal_opf_",hs_idx,"_to_",he_idx,".json"])
+  data = JSON.parsefile(opf_file_name)
+  
+  
+  for (i,solution) in data
+    for (g,gen) in solution["solution"]["gen"]
+      if zonal_input["gen"]["$g"]["node"] in ["BE00","DE00","NL00","UK00","DKE1","DEKF"]
+        if zonal_input["gen"]["$g"]["type"] in ["Offshore Wind","Solar PV","Onshore Wind"]
+          RES += gen["pg"]
+        end
+        if zonal_input["gen"]["$g"]["type"] == "Offshore Wind"
+          Offshore += gen["pg"]
+        end
+        if zonal_input["gen"]["$g"]["type"] == "Onshore Wind"
+          Onshore_z += gen["pg"]
+        end
+        if zonal_input["gen"]["$g"]["type"] == "Solar PV"
+          Solar_z += gen["pg"]
+        end
+      
+      #=
+      if zonal_input["gen"]["$g"]["node"] == "BE00"
+        gen_BE += gen["pg"]
+      end
+      if zonal_input["gen"]["$g"]["node"] == "DE00"
+        gen_DE += gen["pg"]
+      end
+      if zonal_input["gen"]["$g"]["node"] == "NL00"
+        gen_NL += gen["pg"]
+      end
+      if zonal_input["gen"]["$g"]["node"] == "UK00"
+        gen_UK += gen["pg"]
+      end
+      if zonal_input["gen"]["$g"]["node"] == "DKE1" || zonal_input["gen"]["$g"]["node"] == "DEKF" 
+        gen_DK += gen["pg"]
+      end=#
+        generation += gen["pg"]
+      end
+    end
+  end
+end

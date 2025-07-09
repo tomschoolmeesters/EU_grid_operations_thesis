@@ -129,18 +129,30 @@ function Analyse_generation_types(hour_range,start_hour)
     # Plot met generatie en load per uur
     P2 = Plots.plot()
     time = 1:length(first(values(Generation_per_hour)))
-
+        #=
     for (type, data) in Generation_per_hour
         if type in selected_types
             Plots.plot!(time, data ./ 1000, label=type, linewidth=2)
         end
     end
+=#  #["Solar PV", "Offshore", "Onshore", "Hard Coal", "Oil", "Hydro Run-of-River", "Gas", "XB_dummy", "Biomass", "Nuclear", "Lignite", "Storage", "VOLL"]
+    Plots.plot!(time, Generation_per_hour["Solar PV"] ./ 1000, label="Solar PV", linewidth=2,grid=false)
+    Plots.plot!(time, Generation_per_hour["Offshore"] ./ 1000, label="Offshore Wind", linewidth=2)
+    Plots.plot!(time, Generation_per_hour["Onshore"] ./ 1000, label="Onshore Wind", linewidth=2)
+    Plots.plot!(time, Generation_per_hour["VOLL"] ./ 1000, label="Load shedding", linewidth=2)
+    Plots.plot!(time, Generation_per_hour["XB_dummy"] ./ 1000, label="Cross Border", linewidth=2,linestyle=:dash)
+    non_res_data = Generation_per_hour["Hard Coal"] .+ Generation_per_hour["Oil"] .+ Generation_per_hour["Gas"] .+ Generation_per_hour["Biomass"] .+ Generation_per_hour["Nuclear"] .+ Generation_per_hour["Lignite"] .+ Generation_per_hour["Hydro Run-of-River"] .+ Generation_per_hour["Storage"]
+    Plots.plot!(time, non_res_data ./ 1000, label="Non-Res", linewidth=2)
+    
+    Plots.plot!(time, Load_per_hour ./ 1000, label="Load", linewidth=2, linestyle=:dash,size=(800, 600))
+    Plots.xlims!(0.8,15.2)
+    Plots.xticks!(1:1:15)
+    Plots.ylims!(-50,250)
 
-    Plots.plot!(time, Load_per_hour ./ 1000, label="Load", linewidth=2, linestyle=:dash)
     Total_load = sum(Load_per_hour)
     println(Total_load)
     # Labels en titel toevoegen
-    xlabel!("Time")
+    xlabel!("Scenario")
     ylabel!("Power (GW)")
     title!("Electricity Generation and Load")
 

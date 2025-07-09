@@ -108,11 +108,18 @@ end
 function construct_data_dictionary_2024(ntcs, arcs, capacity, nodes, demand, scenario_id, climate_year, gen_types, pv, wind_onshore, wind_offshore, gen_costs, emission_factor, inertia_constants, node_positions; co2_cost = 0.0)
     scenario = scenario_id[1:2]
     year = scenario_id[3:end]
-
+    
+    BASE_DIR = "C:\\Users\\tomsc\\.julia\\dev\\EU_grid_operations_thesis"
     file_data = joinpath(BASE_DIR,"data_sources", "TYNDP2024","250117_TYNDP2024Scenarios_Electricity_SupplyMix.xlsx")
     capacity_ = XLSX.readtable(file_data,"250117_TYNDP2024Scenarios_Elect")
     capacity_data = _DF.DataFrame(Year = capacity_[1][1], Scenario = capacity_[1][2], Category_Simple= capacity_[1][3], Category_Detail = capacity_[1][4], Value = capacity_[1][5], 
     Country = capacity_[1][6], Climate_Year = capacity_[1][7], Property_Name = capacity_[1][8], Unit_Name = capacity_[1][9])
+
+     BASE_DIR = "C:\\Users\\tomsc\\.julia\\dev\\EU_grid_operations_thesis"
+    file_data_demand = joinpath(BASE_DIR,"data_sources", "TYNDP2024","250117_TYNDP2024Scenarios_Electricity_Demand.xlsx")
+    demand_ = XLSX.readtable(file_data_demand,"250117_TYNDP2024Scenarios_Elect")
+    demand_data = _DF.DataFrame(Year = demand_[1][1], Scenario = demand_[1][2], Technology= demand_[1][3], Node_Type = demand_[1][4], Value = demand_[1][5], 
+    Country = demand_[1][6], Climate_Year = demand_[1][7], Unit_Name = demand_[1][8])
 
 
     data = Dict{String, Any}()
@@ -143,7 +150,8 @@ function construct_data_dictionary_2024(ntcs, arcs, capacity, nodes, demand, sce
         node_id = nodes.node_id[n]
         nodal_data[node_id] = Dict{String, Any}()
         nodal_data[node_id]["index"] = n
-        nodal_data[node_id]["demand"] = [get_demand_data(demand, node_id, hour) for hour in 1:8760]
+        #nodal_data[node_id]["demand"] = [get_demand_data(demand, node_id, hour) for hour in 1:8760]
+        nodal_data[node_id]["demand"] = get_demand_data_ext(demand,demand_data,nodes,node_id,scenario,year,climate_year)
         nodal_data[node_id]["generation"] = Dict{String, Any}()
     
         for g in gen_types
@@ -151,7 +159,12 @@ function construct_data_dictionary_2024(ntcs, arcs, capacity, nodes, demand, sce
 
             gen_ratio = get_generation_ratio_2024(capacity, g, node_id,nodes)
             corrected_capacity = get_corrected_capacity_2024(year,scenario,g,node_id,climate_year,nodes,capacity_data)
-
+            if node_id == "DKE1" && corrected_capacity != nothing
+                corrected_capacity = 2/3 .* corrected_capacity
+                
+            elseif node_id == "DKW1" && corrected_capacity != nothing
+                corrected_capacity = 1/3 .* corrected_capacity
+            end
             if corrected_capacity != nothing
                 nodal_data[node_id]["generation"][g]["capacity"] = gen_ratio * corrected_capacity
             else
