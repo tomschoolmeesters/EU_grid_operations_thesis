@@ -3,7 +3,7 @@ name: Documentation
 on:
   push:
     branches:
-      - main  # Or the branch you're using
+      - main  # adjust if your default branch is not "main"
 
 jobs:
   build:
@@ -15,7 +15,7 @@ jobs:
       - name: Set up Julia
         uses: julia-actions/setup-julia@v1
         with:
-          version: '1.9'  # Or your Julia version
+          version: '1.9'
 
       - name: Install dependencies
         run: |
@@ -24,7 +24,7 @@ jobs:
             Pkg.develop(PackageSpec(path="."));
             Pkg.instantiate();'
 
-      - name: Build documentation
+      - name: Build docs
         run: julia --project=docs docs/make.jl
 
       - name: Deploy to GitHub Pages
