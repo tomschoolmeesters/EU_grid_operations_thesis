@@ -1,3 +1,4 @@
+using SparseArrays
 using Documenter, EU_grid_operations
 
 makedocs(
