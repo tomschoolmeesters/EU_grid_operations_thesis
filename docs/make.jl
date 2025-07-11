@@ -6,9 +6,8 @@ makedocs(
     modules = [EU_grid_operations],
     format = Documenter.HTML(),
     pages = [
-        "Home" => "index.md",
-        "More Info" => "other_pages.md"
-    ]
+        "Home" => "index.md"
+        ]
 )
 
 deploydocs(
