@@ -1,6 +1,3 @@
 # EU_grid_operations.jl
 
 Welcome to the documentation for `EU_grid_operations.jl`.
-
-```@meta
-CurrentModule = EU_grid_operations

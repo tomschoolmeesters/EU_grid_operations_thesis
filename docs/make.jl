@@ -6,13 +6,13 @@ makedocs(
     sitename = "EU_grid_operations",
     format = Documenter.HTML(),
     pages = [
-        "Home" => "index.md"
+    "Home" => "src/index.md"
     ]
 )
 
 deploydocs(
-    repo = "github.com/tomschoolmeesters/EU_grid_operations_thesis.git",
-    branch = "gh-pages",
+    repo = "https://github.com/tomschoolmeesters/EU_grid_operations_thesis.git",
+    branch = "main",
     devbranch = "main",  # change if your main branch has a different name
     target = "build",
     versions = nothing
