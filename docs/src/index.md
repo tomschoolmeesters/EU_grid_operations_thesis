@@ -1,3 +1,8 @@
-# EU_grid_operations.jl
+# Welcome to MyPackage.jl
 
-Welcome to the documentation for `EU_grid_operations.jl`.
+Documentation for `EU_grid_operations`.
+
+```@example
+using EU_grid_operations
+
+# Example usage

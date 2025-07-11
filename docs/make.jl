@@ -1,19 +1,17 @@
-using SparseArrays
-using Documenter, EU_grid_operations
+using Documenter
+using EU_grid_operations  # pas aan naar je pakketnaam
 
 makedocs(
+    sitename = "EU_grid_operations Documentation",
     modules = [EU_grid_operations],
-    sitename = "EU_grid_operations",
     format = Documenter.HTML(),
     pages = [
-    "Home" => "src/index.md"
+        "Home" => "index.md",
+        "More Info" => "other_pages.md"
     ]
 )
 
 deploydocs(
-    repo = "https://github.com/tomschoolmeesters/EU_grid_operations_thesis.git",
-    branch = "main",
-    devbranch = "main",  # change if your main branch has a different name
-    target = "build",
-    versions = nothing
+    repo = "github.com/tomschoolmeesters/EU_grid_operations_thesis.git",
+    target = "build"
 )
