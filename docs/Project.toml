@@ -1,5 +1,7 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+PowerModelsACDC = "e6d91411-43f3-45ed-8d00-87f90c1c4311"
+EUGridOperations = "je-eigen-uuid-hier"  # automatisch gegenereerd door `Pkg.generate` of `PkgTemplates`
 
 [compat]
-Documenter = "1"
+julia = "1.9"

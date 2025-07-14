@@ -1,5 +1,8 @@
-using Documenter
-using EU_grid_operations  # pas aan naar je pakketnaam
+using Pkg
+Pkg.activate(@__DIR__)
+Pkg.instantiate()
+
+using Documenter, EUGridOperations
 
 makedocs(
     sitename = "EU_grid_operations Documentation",
@@ -12,5 +15,6 @@ makedocs(
 
 deploydocs(
     repo = "github.com/tomschoolmeesters/EU_grid_operations_thesis.git",
+    devbranch = "main",
     target = "build"
 )

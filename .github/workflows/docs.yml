@@ -2,8 +2,7 @@ name: Documentation
 
 on:
   push:
-    branches:
-      - main  # adjust if your default branch is not "main"
+    branches: ["main"]
 
 jobs:
   build:
@@ -12,28 +11,15 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Checkout submodules
-        run: git submodule update --init --recursive
-
       - name: Set up Julia
         uses: julia-actions/setup-julia@v1
         with:
-          version: '1.11.6'
+          version: '1.9'
 
       - name: Install dependencies
-        run: |
-          julia --project=docs -e '
-            using Pkg;
-            Pkg.develop(path="libs/PowerModelsACDC");
-            Pkg.develop(path=".");
-            Pkg.instantiate();
-          '
+        run: julia --project=docs -e 'using Pkg; Pkg.instantiate();'
 
-      - name: Build docs
+      - name: Build Docs
         run: julia --project=docs docs/make.jl
-
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs/build
+        env:
+          CI: "true"
