@@ -22,19 +22,6 @@ function load_results(tyndp_version, scenario, year, climate_year, type)
     return result, input_data, scenario_data
 end
 
-function load_results_only(scenario, climate_year; file_name)
-    result_file_name =   "./results/"*file_name*"_"*scenario*"_"*climate_year*".json"
-    
-
-    result = Dict()
-    input_data = Dict()
-    scenario_data = Dict()
-    d = JSON.parsefile(result_file_name)
-    result = JSON.parse(d)
-  
-
-    return result
-end
 
 function load_results_only(scenario, climate_year; file_name)
     result_file_name =   "./results/"*file_name*"_"*scenario*"_"*climate_year*".json"
