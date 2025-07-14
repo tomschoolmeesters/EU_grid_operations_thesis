@@ -2,7 +2,7 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.instantiate()
 
-using Documenter, EUGridOperations
+using Documenter, EU_grid_operations
 
 makedocs(
     sitename = "EU_grid_operations Documentation",
