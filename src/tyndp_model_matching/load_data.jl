@@ -12,16 +12,16 @@ function load_res_data()
     # pv_file_link = "https://zenodo.org/record/3702418/files/PECD-MAF2019-wide-PV.feather?download=1" 
    
     # If files are saved locally under folder scenarios
-    file_wind_onshore  = "./data_sources/PECD-MAF2019-wide-WindOnshore.feather"
-    file_wind_offshore = "./data_sources/PECD-MAF2019-wide-WindOffshore.feather"
-    file_pv            = "./data_sources/PECD-MAF2019-wide-PV.feather"                 
+    file_wind_onshore  = joinpath(@__DIR__, "..",".." ,"data_sources", "PECD-MAF2019-wide-WindOnshore.feather")
+    file_wind_offshore = joinpath(@__DIR__, "..",".." ,"data_sources", "PECD-MAF2019-wide-WindOffshore.feather")
+    file_pv            = joinpath(@__DIR__, "..",".." ,"data_sources", "PECD-MAF2019-wide-PV.feather")               
    
     pv = Feather.read(file_pv) 
     wind_onshore = Feather.read(file_wind_onshore)
     wind_offshore = Feather.read(file_wind_offshore)
    
     return pv, wind_onshore, wind_offshore
-   end
+end
 
 function process_RES_time_series(wind_onshore,wind_offshore,pv,corrected_year) # corrected year makes sure you are calling the right year from the Feather files, it is defined as corrected_year = parse(Int64,year) - 1982 + 5 # 1982 corresponds to the 5th column
     RES_zones = Dict{String,Any}()
