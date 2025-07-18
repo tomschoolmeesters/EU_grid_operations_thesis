@@ -36,6 +36,7 @@ Analyzes the power flows, demand, generation, and converter connections for a gi
         - Net power balance (generation - withdrawals)
 
 """
+
 function Analyse_bus(n,nodal_input,nodal_result,timeseries_data,number_of_hours,start_hour=1)
 
     # Determine if bus is AC or DC

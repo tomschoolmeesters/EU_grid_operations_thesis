@@ -40,6 +40,7 @@ Analyse and visualize electricity generation by generator type and storage over 
     pie diagram for a full year, you need to adjust the values using the corresponding factor. (not implemented here yet)
 
 """
+
 function Analyse_generation_types(hour_range,start_hour,nodal_input,nodal_result,output_dir_fig)
     # Collect unique generator types from nodal input
     types = []

@@ -518,6 +518,7 @@ Computes cross-border power flows for each border defined in a zonal grid, based
     - Sums bidirectional flows.
     - Simplified result access (no "solution" nesting).
 """
+
 function get_xb_flows_v2(zone_grid, zonal_result, zonal_input, zone_mapping)
     borders = Dict{String, Any}()
 

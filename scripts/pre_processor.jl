@@ -160,6 +160,7 @@ Computes the inverse of the susceptance matrix based on nodal input data.
 # Dependencies
     - Requires `LinearAlgebra` for LU decomposition and matrix inversion.
 """
+
 function get_inverse_susceptance_matrix(nodal_input)
     # Get the reduced B matrix and accompanying data
     susceptance_matrix, bus_index, AC_branches = get_susceptance_matrix(nodal_input)
@@ -256,6 +257,7 @@ Extracts all AC buses that are associated with offshore wind infrastructure. The
     - `AC_buses`: A vector of unique AC bus indices associated with offshore infrastructure.
 
 """
+
 function OFF_AC_buses(nodal_input, OFF_DC_buses)
     AC_buses = Int[]  # Initialize empty vector to store AC bus indices
 
@@ -292,6 +294,7 @@ Determines whether a given point is inside a polygon using the ray casting algor
     - `inside`: `true` if the point lies inside the polygon, otherwise `false`.
 
 """
+
 function is_point_in_polygon(point, polygon)
     lat, lon = point
     n = length(polygon)
@@ -330,6 +333,7 @@ Filters offshore DC buses based on whether they lie within a predefined polygona
     (using the `is_point_in_polygon` function, based on the ray casting algorithm).
 
 """
+
 function update_connectionzone(OFF_dc_buses)
     updated_OFF_dc_buses = Dict{String, Dict{String, Any}}()
 
@@ -371,6 +375,7 @@ and expansion based on the input network data and offshore DC buses.
 - `AC_new_corridor_idx`: Starting index for new AC corridors.
 - `DC_new_corridor_idx`: Starting index for new DC corridors.
 """
+
 function candidate_lines_ext(nodal_input, OFF_dc_buses, relocation_dict; offshore_hubs=false)
     # Get offshore AC buses connected to the offshore DC buses
     OFF_ac_buses = OFF_AC_buses(nodal_input, OFF_dc_buses)
@@ -613,6 +618,7 @@ based on their ratings, distances, and financial assumptions.
 # Output
     - Updated `ne_branch` and `ne_branchDC` dictionaries with cost fields added.
 """
+
 function update_cost_data(ne_branch, ne_branchDC, nodal_input)
     # Cost assumptions and financial parameters
     AC_cost_MWkm = 0.0012
@@ -729,6 +735,7 @@ Applies Winsorization to a matrix, limiting its values within specified lower an
     - This technique reduces the influence of extreme outliers by capping all values below the lower percentile and above the upper percentile.
 
 """
+
 function winsorize_matrix!(matrix, lower_pct, upper_pct)
     # Flatten the matrix into a 1D vector
     flat_data = vec(matrix)
@@ -768,6 +775,7 @@ Performs a full PTDF-based sensitivity and clustering analysis of candidate rein
 # Notes
 - Assumes candidate AC branches are indexed starting at 200000, and DC branches at 500000.
 """
+
 function PTDF_analysis_full(nodal_input, nodal_result, number_of_hours, ne_branch, ne_branchDC)
 
     # Compute the PTDF matrix, AC branch data, and bus indexing map
@@ -906,6 +914,7 @@ and voltage angle differences over a given time horizon.
     - DC branches use fixed capacity and lambda differences.
     - Angles are converted from degrees to radians for AC computation.
 """
+
 function Potential_investment_benefit(idx, ne_branch, ne_branchDC, number_of_hours, start_hour, nodal_result, factor)
     # Initialize storage vectors for both lambda (nodal prices) and voltage angles
     lambda_f = Float64[]  # Nodal prices at the 'from' end
@@ -986,6 +995,7 @@ of a candidate reinforcement line (AC or DC) over a given time horizon.
 # Output
     - delta_lambda::Float64: Weighted sum of absolute λ-differences over time.
 """
+
 function delta_lambda(idx, number_of_hours, start_hour,nodal_result,ne_branch, ne_branchDC, factor)
 
     lambda_f = Float64[]  # Store λ values at the 'from' side of the branch

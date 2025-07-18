@@ -101,6 +101,7 @@ Generates scatter plots of renewable energy curtailment, both:
     - Uses external function: `RES_curtailment_WO`
     - Uses: `Plots` package
 """
+
 function scatter_curtailment(nodal_input,nodal_result,timeseries_data, number_of_hours; start_hour=1)
     Curt = Dict() # Stores curtailment time series per generator
 

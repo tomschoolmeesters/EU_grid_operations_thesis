@@ -80,7 +80,7 @@ end
 
 Computes the hourly curtailment profile for a specific renewable energy generator (Solar PV, Offshore Wind, or Onshore Wind) over a simulation period.
 
-    # Arguments
+- Arguments
     - `g::Int`: Generator index (as used in the input and result dictionaries).
     - `gen_type::String`: Type of renewable generator (`"Solar PV"`, `"Offshore Wind"`, or `"Onshore Wind"`).
     - `result::Dict`: Dictionary containing simulation results, indexed by hour.
@@ -89,12 +89,12 @@ Computes the hourly curtailment profile for a specific renewable energy generato
     - `start_hour::Int`: Index of the first hour of the simulation.
     - `number_of_hours::Int`: Total number of hours in the simulation.
 
-    # Output
+- Output
     - Returns a tuple of two arrays:
         - `RES_Curtailment::Vector{Float64}`: Hourly curtailment ratios (0.0 to 1.0).
         - `Uncurtailed::Vector{Float64}`: Hourly uncurtailed energy values (in MW) = maximum available power.
 
-    # Description
+- Description
     - For each hour in the simulation, the function calculates the potential (uncurtailed) and actual (delivered) energy for the specified generator.
     - Curtailment is defined as the relative difference between potential and delivered energy:  
       `curtailment = (uncurtailed - delivered) / uncurtailed`
@@ -102,6 +102,7 @@ Computes the hourly curtailment profile for a specific renewable energy generato
     - If the generator is not active in a given hour's result, a warning is printed.
 
 """
+
 function RES_curtailment_WO(g, gen_type, result, input, timeseries, start_hour, number_of_hours)
     # Preallocate arrays for curtailment values and uncurtailed energy
     RES_Curtailment = zeros(number_of_hours)
@@ -220,6 +221,7 @@ of congestion levels in the network, where higher values imply more uneven margi
     # Notes
     - Skips any hour where the optimization result is infeasible (`objective === nothing`).
 """
+
 function Congestion_index(result,number_of_hours)
     Congestion_index_values=Dict()
     for i in 1:number_of_hours
@@ -352,6 +354,7 @@ Computes the Saturation Index for each simulation hour, which indicates how full
         Saturation Index = sum(|P_flow|)/sum(P_rated)
 
 """
+
 function Saturation_index(result,input)
     Saturation_index_values = Dict()
     # Iterate over all time steps (hours) in the result dictionary
