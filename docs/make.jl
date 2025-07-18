@@ -21,14 +21,11 @@ makedocs(
         "Pre-Processor" => "pre_processor.md",
         ],
 
-    "Update of PowerModelsACDC" => "powermodelsacdc_update.md",
-
     "Test Cases" =>
         ["Overview" => "test_case_overview.md",
         "Zonal OPF" => "zonal_opf.md",
         "Nodal OPF" => "nodal_opf.md",
-        "Nodal TNEP" => "nodal_tnep.md",
-        "Post-Processing" => "post_processing.md"
+        "Nodal TNEP" => "nodal_tnep.md"
         ]
     ]
 
