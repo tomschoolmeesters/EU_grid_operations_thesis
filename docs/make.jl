@@ -11,12 +11,24 @@ makedocs(
     pages = [
     "Home" => "index.md",
     "Library" => 
-        ["Analyse Bus" => "bus.md",
+        ["Loading and Preprocessing Data" => "loading_data.md",
+        "Analyse Bus" => "bus.md",
         "Analyse Branch" => "branch.md",
         "Analyse Generator" => "generator.md",
         "Congestion and Saturation" => "congestion_saturation.md",
         "Analyse Load" => "load.md",
         "Representative Scenarios" => "representative_scenarios.md",
+        "Pre-Processor" => "pre_processor.md",
+        ],
+
+    "Update of PowerModelsACDC" => "powermodelsacdc_update.md",
+
+    "Test Cases" =>
+        ["Overview" => "test_case_overview.md",
+        "Zonal OPF" => "zonal_opf.md",
+        "Nodal OPF" => "nodal_opf.md",
+        "Nodal TNEP" => "nodal_tnep.md",
+        "Post-Processing" => "post_processing.md"
         ]
     ]
 

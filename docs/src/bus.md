@@ -2,7 +2,7 @@
 
 This section provides tools to analyze individual buses in the power grid, including their demand, generation, power flows, and nodal prices over time.
 
-#### Analyse\_bus
+## Analyse\_bus
 
 Analyzes the power flows, demand, generation, and converter connections for a given bus (AC or DC) over a simulation period.
 
@@ -25,8 +25,9 @@ Analyzes the power flows, demand, generation, and converter connections for a gi
 ```julia
 function Analyse_bus(n,nodal_input,nodal_result,timeseries_data,number_of_hours,start_hour=1)
 ```
+---
 
-####  nodal\_price
+##  nodal\_price
 
 Computes the average nodal electricity prices for all AC and DC buses over a specified range of hours, and identifies the minimum and maximum nodal prices observed.
 
@@ -48,8 +49,9 @@ Computes the average nodal electricity prices for all AC and DC buses over a spe
 ```julia
 function nodal_price(nodal_result, nodal_input,hour_range)
 ```
+---
 
-#### plot\_nodes\_with\_prices
+## plot\_nodes\_with\_prices
 
 Plots a geographical map of grid nodes colored by their nodal prices for a given hour.
 

@@ -1,6 +1,6 @@
 # Congestion
 
-#### where\_congestion
+## where\_congestion
 
 Identify lines (AC and DC) that are frequently congested. Based on thermal rating.
 
@@ -17,8 +17,9 @@ Identify lines (AC and DC) that are frequently congested. Based on thermal ratin
 ```julia
 function where_congestion(nodal_input, nodal_result)
 ```
+---
 
-#### where\_congestion\_electrical
+## where\_congestion\_electrical
 
 Identify AC lines that are electrically congested.
 
@@ -39,8 +40,9 @@ Identify AC lines that are electrically congested.
 ```julia
 function where_congestion_electrical(nodal_input,nodal_result)
 ```
+---
 
-#### Congestion\_index
+## Congestion\_index
 
 Calculates the Congestion Index for a simulation period based on the dual variables. This metric gives an indication 
 of congestion levels in the network, where higher values imply more uneven marginal prices (i.e., congestion).
@@ -64,8 +66,9 @@ of congestion levels in the network, where higher values imply more uneven margi
 ```julia
 function Congestion_index(result,number_of_hours)
 ```
+---
 
-#### overall\_congestion\_index
+## overall\_congestion\_index
 
 Computes the overall (annual) congestion index across the entire network by aggregating nodal prices over all simulation hours and nodes in a reduced timeseries horizon.
 
@@ -84,8 +87,9 @@ Computes the overall (annual) congestion index across the entire network by aggr
 ```julia
 function overall_congestion_index(result,factor)
 ```
+---
 
-#### plot\_Congestion\_index
+## plot\_Congestion\_index
 
 Plots the congestion index over a specified number of hours based on optimization results.
 
@@ -102,7 +106,7 @@ function plot_Congestion_index(result, number_of_hours)
 
 # Saturation
 
-#### Saturation\_index
+## Saturation\_index
 
 Computes the Saturation Index for each simulation hour, which indicates how fully the transmission lines are being utilized relative to their thermal limits.
 
@@ -121,8 +125,9 @@ Computes the Saturation Index for each simulation hour, which indicates how full
 ```julia
 function Saturation_index(result,input)
 ```
+---
 
-#### plot\_Saturation\_index
+## plot\_Saturation\_index
 
 Generates a plot of the saturation index over time based on the simulation results and input data.
 

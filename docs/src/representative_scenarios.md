@@ -1,6 +1,6 @@
 # Representative Scenarios
 
-#### find\_extreme\_scenarios
+## find\_extreme\_scenarios
 
 Identifies indices of time steps representing various extreme scenarios in demand and renewable generation
 based on quantile thresholds.
@@ -29,8 +29,9 @@ based on quantile thresholds.
 ```julia
 function find_extreme_scenarios(demand, renewables, offshore, other_res, demand_w, demand_nw, demand_quantile,renewables_quantile_high, renewables_quantile_low, offshore_quantile_high, other_res_quantile_low, demand_w_quantile_low, demand_nw_quantile_high)
 ```
+---
 
-#### get\_reduced\_timeseries
+## get\_reduced\_timeseries
 
 Reduce detailed hourly time series data into representative clusters using k-means clustering and importance subsampling.
 

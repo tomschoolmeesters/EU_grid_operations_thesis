@@ -1,4 +1,4 @@
-function plot_grid(data, file_name; ac_only = false, color_branches = false, flows_ac = nothing, flows_dc = nothing, maximum_flows = false, plot_node_numbers_ac = false, plot_node_numbers_dc = false)
+function plot_grid(data, file_name; ac_only = false, color_branches = false, flows_ac = nothing, flows_dc = nothing, maximum_flows = false, plot_node_numbers_ac = true, plot_node_numbers_dc = false)
     # Creating a series of vectors to be added to a DataFrame dictionary
     # AC Buses (type 0) and DC Buses (type 1)
     nodes = []
@@ -46,6 +46,7 @@ function plot_grid(data, file_name; ac_only = false, color_branches = false, flo
     for (b, branch) in data["branch"]
         bus_fr = branch["f_bus"]
         bus_to = branch["t_bus"]
+        rating = branch["rate_a"]
         if haskey(data["bus"], "$bus_fr") && haskey(data["bus"], "$bus_to")
             push!(branches, branch["index"])
             push!(bus_fr_,deepcopy(branch["f_bus"]))
@@ -54,7 +55,11 @@ function plot_grid(data, file_name; ac_only = false, color_branches = false, flo
             push!(lon_fr,data["bus"]["$bus_fr"]["lon"])
             push!(lat_to,data["bus"]["$bus_to"]["lat"])
             push!(lon_to,data["bus"]["$bus_to"]["lon"])
-            push!(type_,0)
+            if rating != 0.01
+                push!(type_,0)
+            elseif rating == 0.01
+                push!(type_,0.5)  
+            end
         end
     end
     for (b, branch) in data["branchdc"]
@@ -113,10 +118,11 @@ function plot_grid(data, file_name; ac_only = false, color_branches = false, flo
     
     if color_branches == false
         #DC line display
-        lineDC = PlotlyJS.attr(width=1*txt_x,color="red")
+        lineDC = PlotlyJS.attr(width=0.6*txt_x,color="red")
         
         #AC line display
-        lineAC = PlotlyJS.attr(width=1*txt_x,color="navy")#,dash="dash")
+        lineAC = PlotlyJS.attr(width=0.6*txt_x,color="navy")#,dash="dash")
+        lineAC_WF = PlotlyJS.attr(width=0.4*txt_x,color="orange")
         
         #AC line legend
         trace_AC=[PlotlyJS.scattergeo(;mode="lines",
@@ -124,6 +130,12 @@ function plot_grid(data, file_name; ac_only = false, color_branches = false, flo
         lon=[row.lon_fr,row.lon_to],
         line = lineAC)
         for row in eachrow(map_) if (row[:type]==0)]
+
+        trace_AC2=[PlotlyJS.scattergeo(;mode="lines",
+        lat=[row.lat_fr,row.lat_to],
+        lon=[row.lon_fr,row.lon_to],
+        line = lineAC_WF)
+        for row in eachrow(map_) if (row[:type]==0.5)]
 
         trace_DC=[PlotlyJS.scattergeo(;mode="lines",
         lat=[row.lat_fr,row.lat_to],
@@ -144,7 +156,7 @@ function plot_grid(data, file_name; ac_only = false, color_branches = false, flo
                     flow =  sum(flows_ac["$branch"]) / length(flows_ac["$branch"])
                 end
                 # color = Int(round(max(1, flow * 100)))
-                lineAC = PlotlyJS.attr(width = 1 * txt_x, color = ColorSchemes.get(ColorSchemes.jet, flow))
+                lineAC = PlotlyJS.attr(width = 0.5 * txt_x, color = ColorSchemes.get(ColorSchemes.jet, flow))
                 push!(trace_AC, PlotlyJS.scattergeo(;mode="lines", lat=[row.lat_fr,row.lat_to], lon=[row.lon_fr,row.lon_to], line = lineAC))
             else
                 branch = row.branch
@@ -154,7 +166,7 @@ function plot_grid(data, file_name; ac_only = false, color_branches = false, flo
                     flow =  sum(flows_dc["$branch"]) / length(flows_dc["$branch"])
                 end
                 color = Int(round(max(1, flow * 100)))
-                lineDC = PlotlyJS.attr(width = 2 * txt_x, color =  ColorSchemes.get(ColorSchemes.jet, flow))
+                lineDC = PlotlyJS.attr(width = 0.5 * txt_x, color =  ColorSchemes.get(ColorSchemes.jet, flow))
                 push!(trace_DC, PlotlyJS.scattergeo(;mode="lines", lat=[row.lat_fr,row.lat_to], lon=[row.lon_fr,row.lon_to], line = lineDC))
             end
         end
@@ -162,9 +174,9 @@ function plot_grid(data, file_name; ac_only = false, color_branches = false, flo
      
     #combine plot data               
     if ac_only == true
-        trace=vcat(trace_AC, traceAC) # only AC Branches and buses
+        trace=vcat(trace_AC, traceAC, trace_AC2) # only AC Branches and buses
     else
-        trace=vcat(trace_AC, trace_DC, traceDC, traceAC) # both AC Branches and buses, DC Branches and buses
+        trace=vcat(trace_AC, trace_DC, traceDC, traceAC, trace_AC2) # both AC Branches and buses, DC Branches and buses
     end
     #set map location
     geo = PlotlyJS.attr(fitbounds="locations")
@@ -389,6 +401,7 @@ function plot_grid_tnep(data, file_name,result; ac_only = false, color_branches 
     for (b, branch) in data["branch"]
         bus_fr = branch["f_bus"]
         bus_to = branch["t_bus"]
+        rating = branch["rate_a"]
         if haskey(data["bus"], "$bus_fr") && haskey(data["bus"], "$bus_to")
             push!(branches, branch["index"])
             push!(bus_fr_,deepcopy(branch["f_bus"]))
@@ -397,7 +410,11 @@ function plot_grid_tnep(data, file_name,result; ac_only = false, color_branches 
             push!(lon_fr,data["bus"]["$bus_fr"]["lon"])
             push!(lat_to,data["bus"]["$bus_to"]["lat"])
             push!(lon_to,data["bus"]["$bus_to"]["lon"])
-            push!(type_,0)
+            if rating != 0.01
+                push!(type_,0)
+            elseif rating == 0.01
+                push!(type_,0.5)  
+            end
         end
     end
     for (b, branch) in data["branchdc"]
@@ -489,12 +506,13 @@ function plot_grid_tnep(data, file_name,result; ac_only = false, color_branches 
     
     if color_branches == false
         #DC line display
-        lineDC = PlotlyJS.attr(width=1*txt_x,color="red")
-        lineDC_ne = PlotlyJS.attr(width=1*txt_x,color="yellow")
+        lineDC = PlotlyJS.attr(width=0.7*txt_x,color="red")
+        lineDC_ne = PlotlyJS.attr(width=0.7*txt_x,color="yellow")
         
         #AC line display
-        lineAC = PlotlyJS.attr(width=1*txt_x,color="navy")#,dash="dash")
-        lineAC_ne = PlotlyJS.attr(width=1*txt_x,color="green")#,dash="dash")
+        lineAC = PlotlyJS.attr(width=0.7*txt_x,color="navy")#,dash="dash")
+        lineAC_ne = PlotlyJS.attr(width=0.7*txt_x,color="green")#,dash="dash")
+        lineAC_WF = PlotlyJS.attr(width=0.4*txt_x,color="orange")#,dash="dash")
         
         #AC line legend
         trace_AC=[PlotlyJS.scattergeo(;mode="lines",
@@ -502,6 +520,12 @@ function plot_grid_tnep(data, file_name,result; ac_only = false, color_branches 
         lon=[row.lon_fr,row.lon_to],
         line = lineAC)
         for row in eachrow(map_) if (row[:type]==0)]
+
+        trace_AC2=[PlotlyJS.scattergeo(;mode="lines",
+        lat=[row.lat_fr,row.lat_to],
+        lon=[row.lon_fr,row.lon_to],
+        line = lineAC_WF)
+        for row in eachrow(map_) if (row[:type]==0.5)]
 
         trace_AC_ne=[PlotlyJS.scattergeo(;mode="lines",
         lat=[row.lat_fr,row.lat_to],
@@ -554,9 +578,9 @@ function plot_grid_tnep(data, file_name,result; ac_only = false, color_branches 
      
     #combine plot data               
     if ac_only == true
-        trace=vcat(trace_AC, traceAC,trace_AC_ne) # only AC Branches and buses
+        trace=vcat(trace_AC, traceAC,trace_AC_ne, trace_AC2) # only AC Branches and buses
     else
-        trace=vcat(trace_AC, trace_DC, traceDC, traceAC,trace_AC_ne,trace_DC_ne) # both AC Branches and buses, DC Branches and buses
+        trace=vcat(trace_AC, trace_DC, traceDC, traceAC,trace_AC_ne,trace_DC_ne, trace_AC2) # both AC Branches and buses, DC Branches and buses
     end
     #set map location
     geo = PlotlyJS.attr(fitbounds="locations")
@@ -620,6 +644,7 @@ function plot_grid_candidates(data, file_name; ac_only = false, color_branches =
     for (b, branch) in data["branch"]
         bus_fr = branch["f_bus"]
         bus_to = branch["t_bus"]
+        rating = branch["rate_a"]
         if haskey(data["bus"], "$bus_fr") && haskey(data["bus"], "$bus_to")
             push!(branches, branch["index"])
             push!(bus_fr_,deepcopy(branch["f_bus"]))
@@ -628,7 +653,11 @@ function plot_grid_candidates(data, file_name; ac_only = false, color_branches =
             push!(lon_fr,data["bus"]["$bus_fr"]["lon"])
             push!(lat_to,data["bus"]["$bus_to"]["lat"])
             push!(lon_to,data["bus"]["$bus_to"]["lon"])
-            push!(type_,0)
+            if rating != 0.01
+                push!(type_,0)
+            elseif rating == 0.01
+                push!(type_,0.5)  
+            end
         end
     end
     for (b, branch) in data["branchdc"]
@@ -719,12 +748,13 @@ function plot_grid_candidates(data, file_name; ac_only = false, color_branches =
     
     if color_branches == false
         #DC line display
-        lineDC = PlotlyJS.attr(width=1*txt_x,color="red")
-        lineDC_ne = PlotlyJS.attr(width=1*txt_x,color="yellow")
+        lineDC = PlotlyJS.attr(width=0.7*txt_x,color="red")
+        lineDC_ne = PlotlyJS.attr(width=0.7*txt_x,color="yellow")
         
         #AC line display
-        lineAC = PlotlyJS.attr(width=1*txt_x,color="navy")#,dash="dash")
-        lineAC_ne = PlotlyJS.attr(width=1*txt_x,color="green")#,dash="dash")
+        lineAC = PlotlyJS.attr(width=0.7*txt_x,color="navy")#,dash="dash")
+        lineAC_ne = PlotlyJS.attr(width=0.7*txt_x,color="green")#,dash="dash")
+        lineAC_WF = PlotlyJS.attr(width=0.4*txt_x,color="orange")#,dash="dash")
         
         #AC line legend
         trace_AC=[PlotlyJS.scattergeo(;mode="lines",
@@ -732,6 +762,12 @@ function plot_grid_candidates(data, file_name; ac_only = false, color_branches =
         lon=[row.lon_fr,row.lon_to],
         line = lineAC)
         for row in eachrow(map_) if (row[:type]==0)]
+
+        trace_AC2=[PlotlyJS.scattergeo(;mode="lines",
+        lat=[row.lat_fr,row.lat_to],
+        lon=[row.lon_fr,row.lon_to],
+        line = lineAC_WF)
+        for row in eachrow(map_) if (row[:type]==0.5)]
 
         trace_AC_ne=[PlotlyJS.scattergeo(;mode="lines",
         lat=[row.lat_fr,row.lat_to],
@@ -784,9 +820,9 @@ function plot_grid_candidates(data, file_name; ac_only = false, color_branches =
      
     #combine plot data               
     if ac_only == true
-        trace=vcat(trace_AC, traceAC,trace_AC_ne) # only AC Branches and buses
+        trace=vcat(trace_AC2,trace_AC, traceAC,trace_AC_ne) # only AC Branches and buses
     else
-        trace=vcat(trace_AC, trace_DC, traceDC, traceAC,trace_AC_ne,trace_DC_ne) # both AC Branches and buses, DC Branches and buses
+        trace=vcat(trace_AC2,trace_AC, trace_DC, traceDC, traceAC,trace_AC_ne,trace_DC_ne) # both AC Branches and buses, DC Branches and buses
     end
     #set map location
     geo = PlotlyJS.attr(fitbounds="locations")

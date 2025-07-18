@@ -72,11 +72,50 @@ function scale_generation!(tyndp_capacity, grid_data, scenario, climate_year, zo
     end 
 end
 
+"""
+    scale_generation24!(tyndp_capacity, grid_data, scenario_id, climate_year, zone_mapping, country_names; ns_hub_cap = nothing, exclude_offshore_wind = false)
 
-function scale_generation24!(tyndp_capacity, grid_data, scenario_id, climate_year, zone_mapping; ns_hub_cap = nothing, exclude_offshore_wind = false)
+Scales the maximum generation capacities ("pmax") of generators in the grid model based on
+capacity data from TYNDP scenarios for a given scenario, year, climate year, and geographic zones.
+
+# Arguments
+    - `tyndp_capacity`: Capacity data from TYNDP with installed capacities by scenario, year, type, climate year, and country.
+    - `grid_data`: Dictionary containing grid information, including generator data and zonal generation capacities.
+    - `scenario_id`: Scenario identifier string combining scenario code and year (e.g., "DE2024").
+    - `climate_year`: Climate year to consider for capacity adjustments.
+    - `zone_mapping`: Maps grid zones to country codes (used to find country names).
+    - `country_names`: Maps country codes to full country names (used for lookups in capacity data).
+
+# Keyword Arguments
+    - `ns_hub_cap` (default = nothing): Optional capacity override for the "NSEH" offshore wind hub zone.
+    - `exclude_offshore_wind` (default = false): If true, offshore wind generators are excluded from scaling.
+
+# Output
+    - Modifies `grid_data["gen"]` in-place by adjusting each generator's `pmax` attribute according to the ratio of 
+    TYNDP capacities to original capacities.
+
+# Dependencies
+    - Calls the external function `get_generation_capacity_2024_v2(...)` to fetch zonal capacity from TYNDP data.
+    - Expects `grid_data` structure to have keys "gen" and "zonal_generation_capacity" with proper data formats.
+
+# Notes
+    - The scaling factor is the ratio of TYNDP zonal capacity (normalized by baseMVA) over existing zonal capacity.
+    - Supports partial scaling by excluding offshore wind generators if specified.
+    - Special handling for the NSEH zone if `ns_hub_cap` is given.
+
+# Description
+    This function iterates over all generators in the grid, determines their TYNDP type and zone, retrieves
+    the corresponding installed capacity from the TYNDP dataset for the specified scenario and year, and
+    scales the generator's maximum capacity (`pmax`) accordingly. The goal is to update the model’s generation
+    capacity to reflect the TYNDP projections while maintaining zone-specific capacity consistency.
+"""
+
+function scale_generation24!(tyndp_capacity, grid_data, scenario_id, climate_year, zone_mapping,country_names; ns_hub_cap = nothing, exclude_offshore_wind = false)
+    # Extract scenario code (first two characters) and year (rest) from scenario_id string
     scenario = scenario_id[1:2]
     year = scenario_id[3:end]
 
+    # Map short scenario codes to full scenario names
     if scenario == "DE"
         scenario = "Distributed Energy"
     elseif scenario == "GA"
@@ -85,43 +124,46 @@ function scale_generation24!(tyndp_capacity, grid_data, scenario_id, climate_yea
         scenario = "National Trends"
     end
 
+    # Loop over all generators in grid data
     for (g, gen) in grid_data["gen"]
         zone = gen["zone"]
 
-        # Check if generator type exists in input data
+        # Check if generator has a TYNDP type assigned, else print generator id
         if haskey(gen, "type_tyndp")
             type = gen["type_tyndp"]
         else
             print(g, "\n")
         end
 
-        # Calculate zonal capacity: For LU there are three different zones coming from the TYNDP data
+        # Initialize zonal capacity for this generator to zero
         zonal_tyndp_capacity = 0
         
+        # Map zone to country code using zone_mapping dictionary
         zone_x = zone_mapping[zone][1]
+        # If country code exists in country_names, get the full country name
         if haskey(country_names,zone_x)
             name = country_names[zone_x]
         end
-        #for tyndp_zone in tyndp_zones
-            # obtain #data,scenario,year,type,climate_year,node
-            zonal_capacity = get_generation_capacity_2024_v2(tyndp_capacity, scenario,year, type, climate_year, name)
-            println("$type, $zone in $name: $zonal_capacity")
-            
-            zonal_tyndp_capacity =  zonal_tyndp_capacity + zonal_capacity
-            #=
-            if zone == "DK1"
-                zonal_tyndp_capacity = zonal_tyndp_capacity * correction[scenario][year][type]
-            elseif zone == "DK2"
-                zonal_tyndp_capacity = zonal_tyndp_capacity * correction[scenario][year][type]
-            else zone == "UK"
-                zonal_tyndp_capacity = zonal_tyndp_capacity * correction[scenario][year][type]
-            end
-            =#
-        # If the zonal capacity is different than zero, scale "pmax" based on the ratios of the zonal capacities
+
+        # Get generation capacity for this country, scenario, year, type, and climate year
+        zonal_capacity = get_generation_capacity_2024_v2(tyndp_capacity, scenario,year, type, climate_year, name)
+
+        # Print info about the capacity for debugging/monitoring
+        println("$type, $zone in $name: $zonal_capacity")
+         
+        # Sum the capacity into zonal total (if multiple zones, sum over them)
+        zonal_tyndp_capacity =  zonal_tyndp_capacity + zonal_capacity
+
+        # Scaling "pmax" of generators if the zonal capacity is not zero
         if zonal_tyndp_capacity !=0
+            # Loop over zonal generation capacity data from grid_data
             for (z, zone_) in grid_data["zonal_generation_capacity"]
+                # Match zone
                 if zone_["zone"] == zone
+                    # Calculate scaling factor as ratio of zonal capacity (normalized by baseMVA) to existing capacity in grid data
                     scaling_factor = max(0, ((zonal_tyndp_capacity / grid_data["baseMVA"]) / zone_[type]) )
+
+                    # Optionally exclude offshore wind generators from scaling if flag is set
                     if exclude_offshore_wind
                         if gen["type"] != "Offshore Wind"
                             gen["pmax"] = gen["pmax"] * scaling_factor
@@ -133,7 +175,7 @@ function scale_generation24!(tyndp_capacity, grid_data, scenario_id, climate_yea
             end
         end
 
-        # Check if a different capacity should be written into the offshore wind generator NSEH
+        # If a specific capacity for the offshore wind hub (NSEH) is provided, override pmax for generators in that zone
         if !isnothing(ns_hub_cap)
             if zone == "NSEH"
                 gen["pmax"] = ns_hub_cap
@@ -454,36 +496,75 @@ function merge_zones!(data; merge_zones = Dict())
 end
 
 
+"""
+    get_xb_flows_v2(zone_grid, zonal_result, zonal_input, zone_mapping)
+
+Computes cross-border power flows for each border defined in a zonal grid, based on zonal simulation results and input network data.
+
+- Arguments
+    - `zone_grid`: Contains information on zones and borders (including zone names and border connections).
+    - `zonal_result`: Dictionary mapping each timestep (as a string key) to simulation results (including branch flows).
+    - `zonal_input`: Input data structure containing network elements like branches with flow directions.
+    - `zone_mapping`: Maps zone names in the grid model to TYNDP zone codes (e.g., `"DE00"`).
+
+- Output
+    - `borders`: Dictionary with keys as border names and values as a dictionary containing a `flow` matrix of shape (1, n_timesteps),
+    where each value represents the net flow across that border at a given timestep:
+        - Positive = export from the first zone to the second (e.g., from DE to AT)
+        - Negative = import into the first zone from the second
+
+- Differences from `get_xb_flows`
+    - Supports multiple zones per border.
+    - Sums bidirectional flows.
+    - Simplified result access (no "solution" nesting).
+"""
 function get_xb_flows_v2(zone_grid, zonal_result, zonal_input, zone_mapping)
-    #zone = zone_grid["zones"][1]
     borders = Dict{String, Any}()
+
+    # Loop over all defined borders in the grid
     for (b, border) in zone_grid["borders"]
-        borders[border["name"]] = Dict{String, Any}("flow" => zeros(1, length(zonal_result)))
-        if haskey(zone_mapping, border["name"])
+        border_name = border["name"]
+
+        # Initialize zero-flow array for this border
+        borders[border_name] = Dict("flow" => zeros(1, length(zonal_result)))
+
+        # Only process if this border exists in the zone mapping
+        if haskey(zone_mapping, border_name)
+            # Loop over each timestep result
             for (r, res) in zonal_result
-                flow = 0
+                total_flow = 0
+
+                # Loop over all zones to compute flow for the current border
                 for zone in zone_grid["zones"]
+                    # Resolve TYNDP zone codes from mapping
                     tyndp_zone_fr = zone_mapping[zone][1]
-                    tyndp_zone_to = zone_mapping[border["name"]][1]
-                
-                    int_name_fr = join([tyndp_zone_fr,"-",tyndp_zone_to]) #bv. DE00-AT00 #fbus = DE, tbus = AT
-                    int_name_to = join([tyndp_zone_to,"-",tyndp_zone_fr]) #bv. AT00-DE00 #fbus = AT, tbus = DE
-                    flow_i = 0
-                    
+                    tyndp_zone_to = zone_mapping[border_name][1]
+
+                    # Build interface names for both directions
+                    int_name_fr = "$tyndp_zone_fr-$tyndp_zone_to"
+                    int_name_to = "$tyndp_zone_to-$tyndp_zone_fr"
+
+                    flow_i = 0  # Temporary flow variable
+
+                    # Loop over all branches to find matching interface
                     for (b, branch) in zonal_input["branch"]
                         if branch["name"] == int_name_fr
-                            flow_i = res[b]["pf"] #withdrawn from DE
+                            flow_i = res[b]["pf"]  # Flow from tyndp_zone_fr to tyndp_zone_to
                         elseif branch["name"] == int_name_to
-                            flow_i = res[b]["pt"] #withdrawn from DE
+                            flow_i = res[b]["pt"]  # Flow from tyndp_zone_to to tyndp_zone_fr (reversed)
                         end
                     end
-                    flow += flow_i #positive = export from DE to AT, negative = import from DE to AT
+
+                    total_flow += flow_i
                 end
-                borders[border["name"]]["flow"][1, parse(Int, r)] = flow
-            end   
+
+                # Store the total flow for this timestep and border
+                borders[border_name]["flow"][1, parse(Int, r)] = total_flow
+            end
         end
-     end
-     return borders
+    end
+
+    return borders
 end
 
 

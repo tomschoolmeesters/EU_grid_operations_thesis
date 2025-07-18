@@ -19,7 +19,15 @@ import Clustering
 import Plots
 import PlotlyJS
 import ColorSchemes
+import Statistics
 import StatsBase
+import Distances
+import DataStructures
+import MultivariateStats
+import LinearAlgebra
+import Combinatorics
+import SparseArrays
+
 # Create our module level logger (this will get precompiled)
 const _LOGGER = Memento.getlogger(@__MODULE__)
 
@@ -42,6 +50,18 @@ include("io/process_results.jl")
 include("io/plotting.jl")
 include("core/batch_opf.jl")
 include("core/tnep_candidates.jl")
+include("../scripts/Analysis/Analyse_bus.jl")
+include("../scripts/Analysis/Analyse_branch.jl")
+include("../scripts/Analysis/Analyse_generator.jl")
+include("../scripts/Analysis/Analyse_load.jl")
+include("../scripts/Analysis/Analyse_generation_types.jl")
+include("../scripts/Analysis/Line_loading.jl")
+include("../scripts/Analysis/Where_curtailment.jl")
+include("../scripts/get_grid_indices.jl")
+include("../scripts/get_reduced_timeseries.jl")
+include("../scripts/group_wind_farms.jl")
+include("../scripts/relocation_wind_farms.jl")
+include("../scripts/pre_processor.jl")
 
 
 end # module EU_grid_operations

@@ -1,12 +1,24 @@
+"""
+    relocation_wind_farms()
+
+Reads offshore wind farm relocation data from an Excel file and organizes it into a nested dictionary.
+
+    # Output
+    - Returns `relocation_dict` with keys:
+        - `old_gen_bus`, `old_lat`, `old_lon`: original bus index and coordinates.
+        - `gen_bus`, `lat`, `lon`: new bus index and coordinates.
+        - `name` (optional): wind farm name if present.
+
+    # Usage
+    - Used to relocate wind farms originally located onshore to offshore wind farms.
+"""
 
 function relocation_wind_farms()
-
     file = "./data_sources/Relocation_WindFarms.xlsx"
     xls = XLSX.readtable(file, "Blad1")
-    
     data, headers = xls
     
-    # Kolommen indexeren
+     # Find column indices for relevant fields
     zone_col = findfirst(==(:zone), headers) 
     g_id_col = findfirst(==(:WindFarm), headers) 
     old_idx_col = findfirst(==(:old_index), headers)
@@ -17,108 +29,90 @@ function relocation_wind_farms()
     lon_col = findfirst(==(:lon), headers)
     name_col = findfirst(==(:name), headers)  
     
-    # Dictionary maken
-    relocation_dict = Dict()
+    relocation_dict = Dict{String, Dict{String, Dict{String, Any}}}()
+
+    nrows = length(data[1])  # Number of rows in the dataset
     
-    # Loop door de gegevens
-    for i in 1:length(data[1])
-        zone = data[zone_col][i] 
+    for i in 1:nrows
+        zone = data[zone_col][i]
         g_id = string(data[g_id_col][i])
-        
-        # Initialiseer land als het nog niet bestaat
+
+        # Initialize nested dict for zone if not present
         if !haskey(relocation_dict, zone)
-            relocation_dict[zone] = Dict()
+            relocation_dict[zone] = Dict{String, Dict{String, Any}}()
         end
-        
-        # Voeg g_id toe aan land
-        relocation_dict[zone][g_id] = Dict(
+
+        # Build dictionary for each wind farm entry
+        entry = Dict(
             "old_gen_bus" => data[old_idx_col][i],
-            "old_lat" => data[old_lat_col][i],
-            "old_lon" => data[old_lon_col][i],
-            "gen_bus" => data[idx_col][i],
-            "lat" => data[lat_col][i],
-            "lon" => data[lon_col][i],
-            if data[name_col][i] !== nothing
-                "name" => data[name_col][i]
-            end
+            "old_lat"     => data[old_lat_col][i],
+            "old_lon"     => data[old_lon_col][i],
+            "gen_bus"     => data[idx_col][i],
+            "lat"         => data[lat_col][i],
+            "lon"         => data[lon_col][i]
         )
-    end
-    return relocation_dict
-end
 
-
-function relocation_wind_farms_ext()
-
-    file = "./data_sources/Relocation_WindFarms_EXTEND.xlsx"
-    xls = XLSX.readtable(file, "Blad1")
-    
-    data, headers = xls
-    
-    # Kolommen indexeren
-    zone_col = findfirst(==(:zone), headers) 
-    g_id_col = findfirst(==(:WindFarm), headers) 
-    lat_col = findfirst(==(:lat), headers)
-    lon_col = findfirst(==(:lon), headers)
-    name_col = findfirst(==(:name), headers)
-    p_col = findfirst(==(:power), headers)
-    ext_col = findfirst(==(:Expandable), headers)
-    year_col = findfirst(==(:Year), headers)
-    onshore_b_col = findfirst(==(:onshore_bus), headers)
-    offshore_b_col = findfirst(==(:offshore_bus), headers)
-
-    # Dictionary maken
-    relocation_dict = Dict()
-    
-    # Loop door de gegevens
-    for i in 1:length(data[1])
-        zone = data[zone_col][i] 
-        g_id = string(data[g_id_col][i])
-        
-        # Initialiseer land als het nog niet bestaat
-        if !haskey(relocation_dict, zone)
-            relocation_dict[zone] = Dict()
+        # Add name only if it exists and is not missing
+        name_val = data[name_col][i]
+        if name_val !== nothing && name_val !== missing
+            entry["name"] = name_val
         end
-        if data[year_col][i] == 2030
-            # Voeg g_id toe aan land
-            relocation_dict[zone][g_id] = Dict(
-                "gen_bus" => data[offshore_b_col][i],
-                "index" => data[g_id_col][i],
-                "lat" => data[lat_col][i],
-                "lon" => data[lon_col][i],
-                "year" => data[year_col][i],
-                "ext" => data[ext_col][i],
-                "pmax" => data[p_col][i],
-                "onshore_bus" => data[onshore_b_col][i],
-                if data[name_col][i] !== nothing
-                    "name" => data[name_col][i]
-                end
-            )
-         end
+
+        relocation_dict[zone][g_id] = entry
     end
     return relocation_dict
 end
+
+"""
+    add_OFF_DC_buses!(input_data)
+
+Clusters relocated offshore wind farms into DC bus groups and creates new DC bus entries for each cluster.
+
+    # Input
+    - `input_data::Dict`: Network input data
+
+    # Output
+    - Returns a tuple:
+        - `new_DC_buses::Dict`: Newly generated DC buses, grouped per zone, containing:
+            - `index`: Unique DC bus index.
+            - `lat`, `lon`: Coordinates of the grouped offshore location.
+            - `zone`: Country/region identifier.
+        - `relocation_dict::Dict`: Offshore wind farm relocation data returned by `relocation_wind_farms()`.
+
+    # Dependencies
+    - `relocation_wind_farms()`: Loads and structures offshore relocation data from an Excel file.
+    - `group_OFFwindfarms(...)`: Clusters offshore wind farms per zone and assigns DC bus coordinates and indices.
+        
+"""
 
 function add_OFF_DC_buses!(input_data)
+    # Load relocation data from Excel
     relocation_dict = relocation_wind_farms()
-    DC_number = maximum([bus["index"] for (b, bus) in input_data["busdc"]]) + 1
-    println(DC_number)
 
+    # Determine the next available DC bus index
+    DC_number = maximum([bus["index"] for (b, bus) in input_data["busdc"]]) + 1
+    println("Starting DC index: $DC_number")
+
+    # Maximum allowed DC clusters per zone (can be adjusted if more or less detail is needed)
     max_groups_dict = Dict(
         "BE" => 2,
         "DE" => 5,
         "DK1" => 3,
-        "DK2" => 3,
-        "FR" => 4,
         "NL" => 7,
-        "NO1" => 1,
         "UK" => 8)
 
+    # Initialize dictionary to store new DC buses
     new_DC_buses = Dict{String,Any}()
+
+    # Process each zone in the relocation dictionary
     for zone in keys(relocation_dict)
         println("Clustering zone $zone")
         max_groups = max_groups_dict["$zone"]
+
+        # Group wind farms into offshore DC buses
         DC_number, DC_bus = group_OFFwindfarms(relocation_dict,zone,max_groups,DC_number)
 
+        # Add each generated DC bus to the result dictionary
         for (i,dc_bus) in DC_bus
             idx = dc_bus["idx"]
             new_DC_buses["$idx"] = Dict{String,Any}()
@@ -132,64 +126,41 @@ function add_OFF_DC_buses!(input_data)
     return new_DC_buses, relocation_dict
 end  
 
+"""
+    update_input_data(input_data)
 
-function add_OFF_DC_buses_ext!(input_data)
-    relocation_dict = relocation_wind_farms_ext()
-    DC_number = maximum([bus["index"] for (b, bus) in input_data["busdc"]]) + 1
-    println(DC_number)
+Adds and configures new offshore wind buses, converters, and AC branches in the power system `input_data` structure. 
+Also relocates offshore wind generators to new offshore buses and connects them appropriately.
 
-    max_groups_dict_30 = Dict(
-        "BE" => 1,
-        "DE" => 9,
-        "DK1" => 3,
-        "DK2" => 1,
-        "FR" => 4,
-        "NL" => 8,
-        "NO1" => 1,
-        "UK" => 14)
+    # Arguments
+    - `input_data::Dict`: Network input data
 
-    max_groups_dict_40 = Dict(
-        "BE" => 1,
-        "DE" => 4,
-        "DK1" => 2,
-        "DK2" => 3,
-        "FR" => 4,
-        "NL" => 4,
-        "NO1" => 1,
-        "UK" => 9)
+    # Output
+    - Returns a tuple of three elements:
+        - `new_DC_buses::Dict{String, Any}`: Dictionary of newly created offshore DC buses.
+        - `relocation_dict::Dict{String, Any}`: Mapping of relocated generators to their new AC bus locations and corresponding DC buses.
+        - `new_branches::Dict{String, Any}`: Dictionary of new AC branches created for connecting offshore generators to converter buses and reconnecting old generator buses if needed.
+
+    # Description
+    - Randomly selects reference elements (AC bus, DC bus, converter, AC branch) as templates to clone for creating new infrastructure.
+    - Iterates over all zones and generators in the `relocation_dict`, and for each:
+        - Creates a new offshore AC bus if it doesn't already exist.
+        - Updates generator bus assignments.
+    - For each new DC bus, creates:
+        - A corresponding AC bus.
+        - A DC bus based on reference.
+        - A `convdc` converter linking the new AC and DC buses.
+    - Builds AC branches to:
+        - Connect relocated generators to the AC side of their associated DC converter.
+        - Optionally reconnect the converter's AC side to the old generator bus if not already connected.
+
+    # Dependencies
+    This function relies on the following other functions:
+        - `add_OFF_DC_buses!(input_data)`
     
-
-    new_DC_buses = Dict{String,Any}()
-    for zone in keys(relocation_dict)
-        println("Clustering zone $zone")
-        max_groups_30 = max_groups_dict_30["$zone"]
-        max_groups_40 = max_groups_dict_40["$zone"]
-        DC_number, DC_bus_30= group_OFFwindfarms_ext(relocation_dict,zone,max_groups_30,max_groups_40,DC_number)
-
-        for (i,dc_bus) in DC_bus_30
-            idx = dc_bus["idx"]
-            new_DC_buses["$idx"] = Dict{String,Any}()
-            new_DC_buses["$idx"]["index"] = idx
-            new_DC_buses["$idx"]["lat"] = dc_bus["lat"]
-            new_DC_buses["$idx"]["lon"] = dc_bus["lon"]
-            new_DC_buses["$idx"]["zone"] = zone
-            new_DC_buses["$idx"]["year"] = 2030
-        end
-        #=
-        for (i,dc_bus) in DC_bus_40
-            idx = dc_bus["idx"]
-            new_DC_buses["$idx"] = Dict{String,Any}()
-            new_DC_buses["$idx"]["index"] = idx
-            new_DC_buses["$idx"]["lat"] = dc_bus["lat"]
-            new_DC_buses["$idx"]["lon"] = dc_bus["lon"]
-            new_DC_buses["$idx"]["zone"] = zone
-            new_DC_buses["$idx"]["year"] = 2040
-        end
-        =#
-    end
-
-    return new_DC_buses, relocation_dict
-end  
+    # Notes
+    - This function modifies `input_data` in-place.
+"""
 
 function update_input_data(input_data)
 
@@ -383,6 +354,155 @@ function update_input_data(input_data)
 
 end
 
+"""
+    relocation_wind_farms_ext()
+
+Reads offshore wind farm relocation and expansion data from an Excel file and organizes it into a nested dictionary.
+
+    # Output
+    - Returns `relocation_dict` with keys per wind farm:
+        - `gen_bus`: new offshore bus index
+        - `index`: wind farm ID
+        - `lat`, `lon`: coordinates
+        - `year`: planned year
+        - `pmax`: power capacity
+        - `onshore_bus`: original onshore bus index
+        - `name` (optional): wind farm name if present
+
+    # Usage
+    - Used to manage relocation and expansion of wind farms planned for 2030, supporting offshore wind development planning.
+"""
+
+function relocation_wind_farms_ext()
+    file = joinpath(@__DIR__, "..", "data_sources", "Relocation_WindFarms_EXTEND.xlsx")
+    xls = XLSX.readtable(file, "Blad1")
+    data, headers = xls
+    
+    # Find column indices for relevant fields
+    zone_col = findfirst(==(:zone), headers) 
+    g_id_col = findfirst(==(:WindFarm), headers) 
+    lat_col = findfirst(==(:lat), headers)
+    lon_col = findfirst(==(:lon), headers)
+    name_col = findfirst(==(:name), headers)
+    p_col = findfirst(==(:power), headers)
+    #ext_col = findfirst(==(:Expandable), headers)
+    year_col = findfirst(==(:Year), headers)
+    onshore_b_col = findfirst(==(:onshore_bus), headers)
+    offshore_b_col = findfirst(==(:offshore_bus), headers)
+
+    relocation_dict = Dict{String, Dict{String, Dict{String, Any}}}()
+    nrows = length(data[1])  # Number of rows in the dataset
+    
+    # Iterate over each row in data
+    for i in 1:nrows
+        zone = data[zone_col][i] 
+        g_id = string(data[g_id_col][i])
+        
+        # Initialiseer land als het nog niet bestaat
+        if !haskey(relocation_dict, zone)
+            relocation_dict[zone] = Dict()
+        end
+        
+        # Voeg g_id toe aan land
+        relocation_dict[zone][g_id] = Dict(
+            "gen_bus" => data[offshore_b_col][i],
+            "index" => data[g_id_col][i],
+            "lat" => data[lat_col][i],
+            "lon" => data[lon_col][i],
+            "year" => data[year_col][i],
+            "pmax" => data[p_col][i],
+            "onshore_bus" => data[onshore_b_col][i],
+            if data[name_col][i] !== nothing
+                "name" => data[name_col][i]
+            end
+        )
+    end
+    return relocation_dict
+end
+
+"""
+    add_OFF_DC_buses_ext!(input_data)
+
+Generates and adds offshore DC bus entries to the input data structure using extended offshore wind farm relocation information for multiple time horizons.
+
+    # Input
+    - `input_data::Dict`: Network input data
+
+    # Output
+    - Returns a tuple:
+        - `new_DC_buses`: Dictionary of newly generated offshore DC buses by zone and year.
+        - `relocation_dict`: Offshore wind farm relocation data returned by `relocation_wind_farms_ext()`.
+
+    # Dependencies
+    - `relocation_wind_farms_ext()`: Loads and structures offshore relocation data from an Excel file.
+    - `group_OFFwindfarms_ext()`: Clusters offshore wind farms per zone and per year (2030 or 2040) and assigns DC bus coordinates and indices.
+"""
+
+function add_OFF_DC_buses_ext!(input_data)
+    # Load extended wind farm relocation data
+    relocation_dict = relocation_wind_farms_ext()
+
+    # Start indexing new DC buses after the highest existing index
+    DC_number = maximum([bus["index"] for (b, bus) in input_data["busdc"]]) + 1
+    println("Starting DC bus index: $DC_number")
+
+    # Max number of DC bus groups per zone for 2030
+    max_groups_dict_30 = Dict(
+        "BE" => 1,
+        "DE" => 9,
+        "DK1" => 3,
+        "NL" => 8,
+        "UK" => 14)
+
+    # Max number of DC bus groups per zone for 2040
+    max_groups_dict_40 = Dict(
+        "BE" => 1,
+        "DE" => 4,
+        "DK1" => 2,
+        "NL" => 4,
+        "UK" => 9)
+    
+    # Container to store newly created DC bus entries
+    new_DC_buses = Dict{String,Any}()
+
+    # Iterate over each country/zone in the relocation data
+    for zone in keys(relocation_dict)
+        println("Clustering zone $zone")
+
+        max_groups_30 = max_groups_dict_30["$zone"]
+        max_groups_40 = max_groups_dict_40["$zone"]
+
+        # Cluster wind farms for 2030 and 2040 and get new DC bus data
+        DC_number, DC_bus_30, DC_bus_40 = group_OFFwindfarms_ext(relocation_dict,zone,max_groups_30,max_groups_40,DC_number)
+
+        # Add 2030 DC bus clusters to the dictionary
+        for (_,dc_bus) in DC_bus_30
+            idx = dc_bus["idx"]
+            new_DC_buses["$idx"] = Dict{String,Any}()
+            new_DC_buses["$idx"]["index"] = idx
+            new_DC_buses["$idx"]["lat"] = dc_bus["lat"]
+            new_DC_buses["$idx"]["lon"] = dc_bus["lon"]
+            new_DC_buses["$idx"]["zone"] = zone
+            new_DC_buses["$idx"]["year"] = 2030
+        end
+
+        # Add 2040 DC bus clusters to the dictionary
+        for (_,dc_bus) in DC_bus_40
+            idx = dc_bus["idx"]
+            new_DC_buses["$idx"] = Dict{String,Any}()
+            new_DC_buses["$idx"]["index"] = idx
+            new_DC_buses["$idx"]["lat"] = dc_bus["lat"]
+            new_DC_buses["$idx"]["lon"] = dc_bus["lon"]
+            new_DC_buses["$idx"]["zone"] = zone
+            new_DC_buses["$idx"]["year"] = 2040
+        end
+    end
+
+    # Return both the new bus dictionary and the relocation mapping
+    return new_DC_buses, relocation_dict
+end  
+
+
 function get_clustering_rating(DC_bus,relocation_dict_zone)
     p_cluster = 0
     for (g,gen) in relocation_dict_zone
@@ -395,7 +515,7 @@ function get_clustering_rating(DC_bus,relocation_dict_zone)
 end
 
 
-function update_input_data_ext(input_data, OPF_year)
+function update_input_data_ext(input_data, OPF_year;use_1MW_connection = true)
 
     new_DC_buses, relocation_dict = add_OFF_DC_buses_ext!(input_data)
     country_dict = Dict()
@@ -432,7 +552,6 @@ function update_input_data_ext(input_data, OPF_year)
                 longitude = relocation_dict["$zone"]["$g_id"]["lon"]
                 name = relocation_dict["$zone"]["$g_id"]["name"]
                 year = relocation_dict["$zone"]["$g_id"]["year"]
-                ext = relocation_dict["$zone"]["$g_id"]["ext"]
                 onshore_bus = relocation_dict["$zone"]["$g_id"]["onshore_bus"]
                 
                 # Voeg de nieuwe bus toe aan input_data
@@ -440,10 +559,8 @@ function update_input_data_ext(input_data, OPF_year)
                 input_data["bus"]["$new_gen_bus"]["lat"] = latitude
                 input_data["bus"]["$new_gen_bus"]["lon"] = longitude
                 input_data["bus"]["$new_gen_bus"]["zone"] = zone
-                input_data["bus"]["$new_gen_bus"]["WF"] = 1
                 input_data["bus"]["$new_gen_bus"]["bus_i"] = new_gen_bus
                 input_data["bus"]["$new_gen_bus"]["year"] = year
-                input_data["bus"]["$new_gen_bus"]["ext"] = ext
                 input_data["bus"]["$new_gen_bus"]["onshore_bus"] = onshore_bus
 
                 # Als naam beschikbaar is, gebruik deze, anders standaard naam
@@ -465,14 +582,13 @@ function update_input_data_ext(input_data, OPF_year)
                 input_data["gen"]["$g_id"]["gen_bus"] = new_gen_bus
                 input_data["gen"]["$g_id"]["index"] = parse(Int,g_id)
                 input_data["gen"]["$g_id"]["year"] = year
-                input_data["gen"]["$g_id"]["ext"] = ext
                 input_data["gen"]["$g_id"]["zone"] = zone
                 input_data["gen"]["$g_id"]["type_tyndp"] = "Offshore Wind"
                 input_data["gen"]["$g_id"]["model"] = 2
                 input_data["gen"]["$g_id"]["pmax"] = relocation_dict["$zone"]["$g_id"]["pmax"]/100
                 input_data["gen"]["$g_id"]["pmin"] = 0
                 input_data["gen"]["$g_id"]["ncost"] = 2
-                if year <=  2050  #OPF_year ###################################################################################################################### 
+                if year <= OPF_year 
                     input_data["gen"]["$g_id"]["gen_status"] = 1
                 else
                     input_data["gen"]["$g_id"]["gen_status"] = 0 #NOT ACTIVE YET
@@ -506,7 +622,6 @@ function update_input_data_ext(input_data, OPF_year)
         input_data["bus"]["$AC_number"]["lon"] = longitude
         input_data["bus"]["$AC_number"]["zone"] = zone
         input_data["bus"]["$AC_number"]["bus_i"] = AC_number
-        input_data["bus"]["$AC_number"]["WF_cluster"] = 1
 
         # Als naam beschikbaar is, gebruik deze, anders standaard naam
         if name_AC !== nothing
@@ -587,17 +702,17 @@ function update_input_data_ext(input_data, OPF_year)
             new_branches["$ACbranch_number"] = deepcopy(input_data["branch"]["$ACbranch_number"])
             ACbranch_number +=1
 
-            if gen["year"] < 2040  ######################################################################################################################
+            if gen["year"] < 2040
                 if !(corr_DC_bus in corr_DC_bus_set)
                     rating = get_clustering_rating(corr_DC_bus,relocation_dict["$zone"])/100
                     old_gen_bus = relocation_dict["$zone"]["$g_id"]["onshore_bus"] #AC bus
                     input_data["branch"]["$ACbranch_number"] = deepcopy(reference_acbranch)
                     input_data["branch"]["$ACbranch_number"]["source_id"][2] = ACbranch_number
                     input_data["branch"]["$ACbranch_number"]["name"] = "WindFarm connector"
-                    input_data["branch"]["$ACbranch_number"]["rate_a"] = rating*2.5
-                    input_data["branch"]["$ACbranch_number"]["rate_b"] = rating*2.5
-                    input_data["branch"]["$ACbranch_number"]["rate_c"] = rating*2.5
-                    input_data["branch"]["$ACbranch_number"]["br_x"] = 0.001
+                    input_data["branch"]["$ACbranch_number"]["rate_a"] = rating
+                    input_data["branch"]["$ACbranch_number"]["rate_b"] = rating
+                    input_data["branch"]["$ACbranch_number"]["rate_c"] = rating
+                    input_data["branch"]["$ACbranch_number"]["br_x"] = 0.01
                     input_data["branch"]["$ACbranch_number"]["f_bus"] = DC_to_ACbus
                     input_data["branch"]["$ACbranch_number"]["t_bus"] = old_gen_bus
                     input_data["branch"]["$ACbranch_number"]["index"] = ACbranch_number
@@ -607,7 +722,7 @@ function update_input_data_ext(input_data, OPF_year)
 
                     ACbranch_number +=1
                 end
-            else
+            elseif gen["year"] >= 2040 && use_1MW_connection
                 if !(corr_DC_bus in corr_DC_bus_set)
                     old_gen_bus = relocation_dict["$zone"]["$g_id"]["onshore_bus"] #AC bus
                     input_data["branch"]["$ACbranch_number"] = deepcopy(reference_acbranch)
@@ -720,15 +835,15 @@ function add_VOLL_generation(EU_grid)
         EU_grid["gen"]["$index"]["type_tyndp"] = "VOLL"
         EU_grid["gen"]["$index"]["model"] = 2
         EU_grid["gen"]["$index"]["gen_bus"] = load_bus
-        EU_grid["gen"]["$index"]["pmax"] = 55
+        EU_grid["gen"]["$index"]["pmax"] = 200
         EU_grid["gen"]["$index"]["country"] = country
         EU_grid["gen"]["$index"]["vg"] = 1.0
         EU_grid["gen"]["$index"]["source_id"] = ["gen", index]
         EU_grid["gen"]["$index"]["index"] = index
-        EU_grid["gen"]["$index"]["cost"] = [300, 0]
-        EU_grid["gen"]["$index"]["qmax"] = 1
+        EU_grid["gen"]["$index"]["cost"] = [60, 0]
+        EU_grid["gen"]["$index"]["qmax"] = 1.77
         EU_grid["gen"]["$index"]["gen_status"] = 1
-        EU_grid["gen"]["$index"]["qmin"] = 0
+        EU_grid["gen"]["$index"]["qmin"] = -1.77
         EU_grid["gen"]["$index"]["type"] = "VOLL"
         EU_grid["gen"]["$index"]["pmin"] = 0
         EU_grid["gen"]["$index"]["ncost"] = 2
@@ -782,8 +897,3 @@ function add_offshore_hub(input_data)
     end
 
 end
-
-
-            
-
-

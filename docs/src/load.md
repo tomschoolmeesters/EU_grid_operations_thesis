@@ -1,6 +1,6 @@
 # Analyse loading
 
-#### Analyse\_load
+## Analyse\_load
 
 Calculates the total electricity demand (in MWh) over a given range of hours.
 
@@ -21,8 +21,9 @@ Calculates the total electricity demand (in MWh) over a given range of hours.
 ```julia
 function Analyse_load(hour_range,nodal_input,nodal_result,timeseries_data)
 ```
+---
 
-#### load\_shedding
+## load\_shedding
 
 Identifies and reports instances of load shedding and demand-side flexibility (e.g. curtailment or reduction)
 during a specified set of hours.
@@ -49,17 +50,18 @@ during a specified set of hours.
 ```julia
 function load_shedding(hour_range,nodal_input,nodal_result)
 ```
+---
 
 ### Line\_loading
 
 Visualize and analyze power flows through a set of transmission lines over all simulated hours.
 
-    # Arguments
+- Arguments
     - `lines`: A list of line identifiers (as strings or symbols) to analyze.
     - `nodal_input`: Dictionary containing input data for the nodal model.
     - `nodal_result`: Dictionary containing simulation results for the nodal model.
 
-    # Description
+- Description
     This function does the following:
     1. Checks whether each line is a DC or AC branch using `nodal_input`.
     2. Collects absolute hourly power flow (`pt`) values for each line from `nodal_result`.
@@ -74,8 +76,9 @@ Visualize and analyze power flows through a set of transmission lines over all s
 ```julia
 function Line_loading(lines,nodal_input,nodal_result)
 ```
+---
 
-#### mean\_Loadfactor
+## mean\_Loadfactor
 
 Compute the average load factor for all transmission lines (AC and DC) over a specified time range.
 
@@ -98,8 +101,9 @@ Compute the average load factor for all transmission lines (AC and DC) over a sp
 ```julia
 function mean_Loadfactor(nodal_input,hour_range)
 ```
+---
 
-#### hourly\_Loadfactor
+## hourly\_Loadfactor
 
 Compute the hourly load factors for all AC and DC transmission lines over a given time range.
 
@@ -120,8 +124,9 @@ Compute the hourly load factors for all AC and DC transmission lines over a give
 ```julia
 function hourly_Loadfactor(nodal_input, hour_range)
 ```
+---
 
-#### plot\_loaded\_grid
+## plot\_loaded\_grid
 
 Visualize the electrical grid using geospatial plots with optional coloring based on line loading.
 

@@ -8,6 +8,32 @@
 # demand time series and list of generator types
 # scenario{String}, e.g. "NT2025"
 
+"""
+    get_grid_data(tyndp_version, scenario, Year, climate_year, z_or_n)
+
+Returns the appropriate grid data based on the TYNDP version and modeling detail.
+
+- Arguments
+    - `tyndp_version`: Year of the TYNDP dataset ("2020" or "2024").
+    - `scenario`: Scenario name or identifier (e.g. "Distributed Energy").
+    - `Year`: Target year of the analysis (e.g. "2030").
+    - `climate_year`: Climate year (e.g. "2032").
+    - `z_or_n`: Either `"zonal"` or `"nodal"` (only relevant for TYNDP 2024).
+
+- Output
+    - Returns a dictionary containing grid data for the specified configuration.
+
+- Notes
+    - `get_grid_data` dispatches to:
+    - `get_grid_data_2020(...)` for TYNDP 2020 (zonal only),
+    - `get_grid_data_2024_zonal(...)` for TYNDP 2024 zonal data,
+    - `get_grid_data_2024_nodal(...)` for TYNDP 2024 nodal data.
+    - Raises an error for unsupported configurations.
+
+- Change summary
+    - Function updated to distinguish between TYNDP 2020 and 2024, and between **zonal** and **nodal** data for 2024.
+"""
+
 function get_grid_data(tyndp_version, scenario, Year, climate_year, z_or_n)    
     if tyndp_version == "2020"
         return get_grid_data_2020(scenario, Year, climate_year)
@@ -309,6 +335,42 @@ function get_grid_data_2020(scenario, Year, climate_year)
 
     return ntcs, nodes, arcs, capacity, demand, gen_types, gen_costs, emission_factor, inertia_constants, start_up_cost, node_positions
 end
+
+"""
+    get_grid_data_2024_zonal(scenario, year, climate_year)
+
+Load and process zonal grid data for the 2024 TYNDP (Ten-Year Network Development Plan) scenario.
+
+-  Arguments
+    - `scenario`: The scenario name (e.g., "NationalTrends", "DistributedEnergy").
+    - `year`: The scenario reference year (e.g., "2030").
+    - `climate_year`: The climate year used for demand time series (e.g., "1982").
+
+- Returns
+    A named tuple containing processed dataframes and dictionaries:
+    - `ntcs`: Net Transfer Capacities (NTCs) with connection IDs and directional capacities.
+    - `nodes`: Information on nodes (zones) including country, coordinates, and region.
+    - `arcs`: Line connectivity between nodes (node_a, node_b).
+    - `demand`: Demand time series per node.
+    - `capacity_2020_template`: Installed generation capacities in a standardized format.
+    - `gen_costs`: Generation costs (€/MWh) by generation type.
+    - `emission_factor`: Emissions (tCO₂/MWh) per generation type.
+    - `inertia_constants`: Inertia constants per generation type (in seconds).
+    - `start_up_cost`: Start-up costs (€/MW/start) by generation type.
+
+- Notes
+    - Data is read from preprocessed Excel and CSV files under the `TYNDP2024` directory.
+    - Generation types are mapped to economic and technical parameters using predefined assumptions based on TYNDP 2020 values and expert judgement.
+    - Capacity is interpreted from PEMMDB2 files, while demand is read from scenario-specific CSVs.
+    - Generation technologies are assigned costs, emissions, and operational parameters via dictionaries.
+
+- Data Sources
+    - [Reference Grid & Investment Candidates](https://2024.entsos-tyndp-scenarios.eu/download/)
+    - [Demand Profiles](https://tyndp.entsoe.eu/maps-data)
+    - PEMMDB2 installed capacity datasets (CSV)
+    - Node lists and network connections (Excel)
+
+"""
 
 function get_grid_data_2024_zonal(scenario, year, climate_year)    
     # data source: https://2024.entsos-tyndp-scenarios.eu/download/#:~:text=Electricity%20and%20Hydrogen%20Reference%20Grid%20%26%20Investment%20Candidates%20After%20Public%20Consultation    
@@ -668,6 +730,38 @@ function get_grid_data_2024_zonal(scenario, year, climate_year)
     return ntcs, nodes, arcs, capacity_2020_template, demand, gen_types, gen_costs, emission_factor, inertia_constants, start_up_cost, node_positions
 end
 
+"""
+    get_grid_data_2024_nodal(scenario, year, climate_year)
+
+Parses and processes the 2024 ENTSO-E TYNDP scenario data to construct nodal grid representations for electricity system modeling.
+
+- Arguments
+    - `scenario::String`: The scenario name (e.g., "NationalTrends", "DistributedEnergy", "GlobalAmbition").
+    - `year::String`: The target simulation year (e.g., "2030", "2040").
+    - `climate_year::String`: The reference climate year used for demand profiles (e.g., "1982").
+
+- Description
+    This function:
+    - Loads electricity grid topology, node data, generation capacities, and demand time series from the 2024 TYNDP Excel and CSV files.
+    - Constructs the necessary nodal representations for lines (`arcs`), nodes (`nodes`), transfer capacities (`ntcs`), and generator attributes.
+    - Defines dictionaries for generation cost, emissions factors, inertia constants, and startup costs, categorized by generation technology.
+
+- Outputs
+    Returns a set of core data structures used for nodal power system modeling:
+    - `ntcs`: DataFrame of NTC values for each direction of grid connection.
+    - `nodes`: DataFrame of electricity node properties and metadata.
+    - `arcs`: DataFrame of line connections between nodes.
+    - `capacity`: DataFrame of installed generation capacity and properties.
+    - `demand`: DataFrame of hourly electricity demand for each node.
+    - `gen_costs`, `emission_factor`, `inertia_constants`, `start_up_cost`: Dictionaries containing generator-specific parameters.
+
+- Data Sources
+    - Reference Grid & Investment Candidates: https://2024.entsos-tyndp-scenarios.eu/download/
+    - Demand Profiles: https://tyndp.entsoe.eu/maps-data
+    - Generation Capacities: 250117_TYNDP2024Scenarios_Electricity_SupplyMix.xlsx
+    - Node List: LIST OF NODES_2024.xlsx
+
+"""
 
 function get_grid_data_2024_nodal(scenario, year, climate_year)    
     # data source: https://2024.entsos-tyndp-scenarios.eu/download/#:~:text=Electricity%20and%20Hydrogen%20Reference%20Grid%20%26%20Investment%20Candidates%20After%20Public%20Consultation    

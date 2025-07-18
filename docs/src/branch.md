@@ -1,6 +1,6 @@
 # Analyse branches
 
-#### Analyse\_branch
+## Analyse\_branch
 
 Analyzes a power branch (AC or DC) from a power system model over a given time window.
 

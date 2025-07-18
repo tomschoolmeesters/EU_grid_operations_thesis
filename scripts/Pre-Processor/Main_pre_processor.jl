@@ -4,6 +4,163 @@ using MultivariateStats
 using StatsBase
 using LinearAlgebra
 
+function correct_parallel_lines(zone_grid)
+    AC_bus_number = maximum(collect(parse.(Int,keys(zone_grid["bus"]))))
+    DC_bus_number = maximum(collect(parse.(Int,keys(zone_grid["busdc"]))))
+    AC_branch_number = maximum([maximum(collect(parse.(Int,keys(zone_grid["ne_branch"])))),maximum(collect(parse.(Int,keys(zone_grid["branch"]))))])
+    DC_branch_number = maximum([maximum(collect(parse.(Int,keys(zone_grid["branchdc_ne"])))),maximum(collect(parse.(Int,keys(zone_grid["branchdc"]))))])
+
+    conn_branch = Dict(
+        "br_r"           => 0.001,
+        "rate_a"         => 150.0,
+        "ratio"          => 1,
+        "shift"          => 0.0,
+        "rate_b"         => 150.0,
+        "br_x"           => 0.001,
+        "interconnector" => false,
+        "rate_c"         => 150.0,
+        "g_to"           => 0.0,
+        "g_fr"           => 0.0,
+        "b_fr"           => 0.001,
+        "source_id"      => Any["branch", 1],
+        "f_bus"          => 1,
+        "br_status"      => 1,
+        "t_bus"          => 1,
+        "b_to"           => 0.001,
+        "index"          => 1,
+        "angmin"         => -1.0472,
+        "angmax"         => 1.0472,
+        "transformer"    => false,
+        "tap"            => 1.0,
+        "type"           => "AC line"
+    )
+
+    conn_branchdc = Dict(
+        "c"         => 0.000001,
+        "ratio"     => 0,
+        "r"         => 0.000001,
+        "status"    => 1,
+        "rateB"     => 150,
+        "fbusdc"    => 1,
+        "source_id" => Any["branchdc", 1],
+        "rateA"     => 150,
+        "l"         => 0.0,
+        "index"     => 1,
+        "rateC"     => 150,
+        "tbusdc"    => 1,
+        "type"      => "DC cable"
+    )
+    for (b,branch) in zone_grid["ne_branch"]
+        f_bus = branch["f_bus"]
+        t_bus = branch["t_bus"]
+        for (b2,branch2) in zone_grid["branch"]
+            if branch2["f_bus"] == f_bus && branch2["t_bus"] == t_bus
+                println("Parallel AC lines detected: $b and $b2")
+                n_fbus = AC_bus_number + 1
+                e_fbus = AC_bus_number + 2
+                n_tbus = AC_bus_number + 3
+                e_tbus = AC_bus_number + 4
+                n_branchf = AC_branch_number + 1
+                e_branchf = AC_branch_number + 2
+                n_brancht = AC_branch_number + 3
+                e_brancht = AC_branch_number + 4
+                
+                #CONNECT NEW PARALLEL LINE
+                branch["f_bus"] = n_fbus
+                branch["t_bus"] = n_tbus
+                branch["c_rating_a"] = deepcopy(branch["rate_a"])
+                branch["type"] == "AC line"
+                zone_grid["bus"]["$n_fbus"] = deepcopy(zone_grid["bus"]["$f_bus"])
+                    zone_grid["bus"]["$n_fbus"]["bus_i"] = n_fbus
+                    zone_grid["bus"]["$n_fbus"]["name"] = "$n_fbus" 
+                    zone_grid["bus"]["$n_fbus"]["index"] = n_fbus
+                    zone_grid["bus"]["$n_fbus"]["source_id"][2] = n_fbus
+                zone_grid["bus"]["$n_tbus"] = deepcopy(zone_grid["bus"]["$t_bus"])
+                    zone_grid["bus"]["$n_tbus"]["bus_i"] = n_tbus
+                    zone_grid["bus"]["$n_tbus"]["name"] = "$n_tbus" 
+                    zone_grid["bus"]["$n_tbus"]["index"] = n_tbus
+                    zone_grid["bus"]["$n_tbus"]["source_id"][2] = n_tbus
+                zone_grid["branch"]["$n_branchf"] = deepcopy(conn_branch)
+                    zone_grid["branch"]["$n_branchf"]["source_id"][2] = n_branchf
+                    zone_grid["branch"]["$n_branchf"]["index"] = n_branchf
+                    zone_grid["branch"]["$n_branchf"]["f_bus"] = n_fbus
+                    zone_grid["branch"]["$n_branchf"]["t_bus"] = f_bus
+                zone_grid["branch"]["$n_brancht"] = deepcopy(conn_branch)
+                    zone_grid["branch"]["$n_brancht"]["source_id"][2] = n_brancht
+                    zone_grid["branch"]["$n_brancht"]["index"] = n_brancht
+                    zone_grid["branch"]["$n_brancht"]["f_bus"] = n_tbus
+                    zone_grid["branch"]["$n_brancht"]["t_bus"] = t_bus
+                #RECONNECT EXISTING LINE
+                branch2["f_bus"] = e_fbus
+                branch2["t_bus"] = e_tbus
+                zone_grid["bus"]["$e_fbus"] = deepcopy(zone_grid["bus"]["$f_bus"])
+                    zone_grid["bus"]["$e_fbus"]["bus_i"] = e_fbus
+                    zone_grid["bus"]["$e_fbus"]["name"] = "$e_fbus" 
+                    zone_grid["bus"]["$e_fbus"]["index"] = e_fbus
+                    zone_grid["bus"]["$e_fbus"]["source_id"][2] = e_fbus
+                zone_grid["bus"]["$e_tbus"] = deepcopy(zone_grid["bus"]["$t_bus"])
+                    zone_grid["bus"]["$e_tbus"]["bus_i"] = e_tbus
+                    zone_grid["bus"]["$e_tbus"]["name"] = "$e_tbus" 
+                    zone_grid["bus"]["$e_tbus"]["index"] = e_tbus
+                    zone_grid["bus"]["$e_tbus"]["source_id"][2] = e_tbus
+                zone_grid["branch"]["$e_branchf"] = deepcopy(conn_branch)
+                    zone_grid["branch"]["$e_branchf"]["source_id"][2] = e_branchf
+                    zone_grid["branch"]["$e_branchf"]["index"] = e_branchf
+                    zone_grid["branch"]["$e_branchf"]["f_bus"] = e_fbus
+                    zone_grid["branch"]["$e_branchf"]["t_bus"] = f_bus
+                zone_grid["branch"]["$e_brancht"] = deepcopy(conn_branch)
+                    zone_grid["branch"]["$e_brancht"]["source_id"][2] = e_brancht
+                    zone_grid["branch"]["$e_brancht"]["index"] = e_brancht
+                    zone_grid["branch"]["$e_brancht"]["f_bus"] = e_tbus
+                    zone_grid["branch"]["$e_brancht"]["t_bus"] = t_bus
+
+
+                AC_bus_number += 4
+                AC_branch_number += 4
+            end
+        end
+    end
+
+    for (b,branch) in zone_grid["branchdc_ne"]
+        f_bus = branch["fbusdc"]
+        t_bus = branch["tbusdc"]
+        for (b2,branch2) in zone_grid["branchdc"]
+            if branch2["fbusdc"] == f_bus && branch2["tbusdc"] == t_bus
+                println("Parallel DC lines detected: $b and $b2")
+                n_fbus = DC_bus_number + 1
+                n_tbus = DC_bus_number + 2
+                n_branchf = DC_branch_number + 1
+                n_brancht = DC_branch_number + 2
+                branch["fbusdc"] = n_fbus
+                branch["tbusdc"] = n_tbus
+                zone_grid["busdc"]["$n_fbus"] = deepcopy(zone_grid["busdc"]["$f_bus"])
+                    zone_grid["busdc"]["$n_fbus"]["busdc_i"] = n_fbus
+                    zone_grid["busdc"]["$n_fbus"]["name"] = "$n_fbus" 
+                    zone_grid["busdc"]["$n_fbus"]["index"] = n_fbus
+                    zone_grid["busdc"]["$n_fbus"]["source_id"][2] = n_fbus
+                zone_grid["busdc"]["$n_tbus"] = deepcopy(zone_grid["busdc"]["$t_bus"])
+                    zone_grid["busdc"]["$n_tbus"]["busdc_i"] = n_tbus
+                    zone_grid["busdc"]["$n_tbus"]["name"] = "$n_tbus" 
+                    zone_grid["busdc"]["$n_tbus"]["index"] = n_tbus
+                    zone_grid["busdc"]["$n_tbus"]["source_id"][2] = n_tbus
+                zone_grid["branchdc"]["$n_branchf"] = deepcopy(conn_branchdc)
+                    zone_grid["branchdc"]["$n_branchf"]["source_id"][2] = n_branchf
+                    zone_grid["branchdc"]["$n_branchf"]["index"] = n_branchf
+                    zone_grid["branchdc"]["$n_branchf"]["fbusdc"] = n_fbus
+                    zone_grid["branchdc"]["$n_branchf"]["tbusdc"] = f_bus
+                zone_grid["branchdc"]["$n_brancht"] = deepcopy(conn_branchdc)
+                    zone_grid["branchdc"]["$n_brancht"]["source_id"][2] = n_brancht
+                    zone_grid["branchdc"]["$n_brancht"]["index"] = n_brancht
+                    zone_grid["branchdc"]["$n_brancht"]["fbusdc"] = n_tbus
+                    zone_grid["branchdc"]["$n_brancht"]["tbusdc"] = t_bus
+                DC_bus_number += 2
+                DC_branch_number += 2
+            end
+        end
+    end
+    return zone_grid
+end
+
 
 function winsorize_matrix!(matrix, lower_pct, upper_pct)
     # Flatten de matrix naar een vector
@@ -15,7 +172,7 @@ function winsorize_matrix!(matrix, lower_pct, upper_pct)
     matrix .= clamp.(matrix, lower, upper)
 end
 
-function Potential_investment_benefit(idx,number_of_hours,start_hour)
+function Potential_investment_benefit(idx,number_of_hours,start_hour,nodal_result)
     lambda_f = []
     lambda_t = []
     ang_f = []
@@ -72,7 +229,7 @@ function Potential_investment_benefit(idx,number_of_hours,start_hour)
     
 end
 
-function delta_lambda(idx,number_of_hours,start_hour)
+function delta_lambda(idx,number_of_hours,start_hour,nodal_result)
     lambda_f = []
     lambda_t = []
 
@@ -105,7 +262,7 @@ function delta_lambda(idx,number_of_hours,start_hour)
     
     delta_lambda = []
     for i in 1:number_of_hours
-        delta_lambda_i = (factor[i]/8760) * factor[i] * lambda_diff[i]
+        delta_lambda_i = (1/8760) * factor[i] * lambda_diff[i]
         push!(delta_lambda,delta_lambda_i)
     end
     
@@ -113,6 +270,8 @@ function delta_lambda(idx,number_of_hours,start_hour)
 end
 
 function PTDF_analysis_full(nodal_input,nodal_result,number_of_hours,ne_branch,ne_branchDC)
+    number_of_hours=15
+    start_hour = 1
 
     PTDF_matrix, AC_branches, bus_index = get_PTDF_matrix(nodal_input)
 
@@ -123,27 +282,30 @@ function PTDF_analysis_full(nodal_input,nodal_result,number_of_hours,ne_branch,n
     println("Start computing PowerFlow matrix")
     # Precompute DC to AC bus mappings for faster lookup
     dc_to_ac_map = Dict(conv["busdc_i"] => conv["busac_i"] for (_, conv) in nodal_input["convdc"])
-    ac_branch_indices = [(bus_index[branch["f_bus"]], bus_index[branch["t_bus"]], parse(Int, iadx) - 200000 + 1, branch["rate_a"]) for (idx, branch) in ne_branch]
+    ac_branch_indices = [(bus_index[branch["f_bus"]], bus_index[branch["t_bus"]], parse(Int, idx) - 200000 + 1, branch["rate_a"]) for (idx, branch) in ne_branch]
     dc_branch_indices = [(bus_index[dc_to_ac_map[branchDC["fbusdc"]]], bus_index[dc_to_ac_map[branchDC["tbusdc"]]], parse(Int, idx) - 500000 + 1 + length(ne_branch), branchDC["rateA"]) for (idx, branchDC) in ne_branchDC]
 
-    for i in 1:size(PTDF_matrix, 1)
+    for i in 1:size(PTDF_matrix_c, 1)
         for (f_idx, t_idx, j, rating) in ac_branch_indices
-            Powerflow_matrix[i, j] = abs(PTDF_matrix[i, t_idx] - PTDF_matrix[i, f_idx]) * rating
+            if rating == 0.01
+                rating = 70
+            end
+            Powerflow_matrix_c[i, j] = abs(PTDF_matrix_c[i, t_idx] - PTDF_matrix[i, f_idx]) * rating
         end
         for (f_idx, t_idx, j, rating) in dc_branch_indices
-            Powerflow_matrix[i, j] = abs(PTDF_matrix[i, t_idx] - PTDF_matrix[i, f_idx]) * rating
+            Powerflow_matrix_c[i, j] = abs(PTDF_matrix_c[i, t_idx] - PTDF_matrix[i, f_idx]) * rating
         end
     end
 
     # Pas PCA toe om het aantal dimensies te reduceren
-    @time pca_AC = fit(PCA, Powerflow_matrix[:,1:length(ne_branch)]; maxoutdim=300);
+    @time pca_AC = fit(PCA, Powerflow_matrix[:,1:length(ne_branch)]; maxoutdim=100);
     @time X_reduced_AC = MultivariateStats.transform(pca_AC, Powerflow_matrix[:,1:length(ne_branch)]);
     @time pca_DC = fit(PCA, Powerflow_matrix[:,length(ne_branch)+1:end]; maxoutdim=300);
     @time X_reduced_DC = MultivariateStats.transform(pca_DC, Powerflow_matrix[:,length(ne_branch)+1:end]);
 
     # Voer MiniBatchKMeans clustering uit
-    @time result_AC = kmeans(X_reduced_AC, 1000; maxiter=75)
-    @time result_DC = kmeans(X_reduced_DC, 200; maxiter=75)
+    @time result_AC = kmeans(X_reduced_AC, 1200; maxiter=105)
+    @time result_DC = kmeans(X_reduced_DC, 200; maxiter=105)
 
     assignment_AC = result_AC.assignments;
     assignment_DC = result_DC.assignments;
@@ -168,7 +330,7 @@ function PTDF_analysis_full(nodal_input,nodal_result,number_of_hours,ne_branch,n
         push!(clusters[cluster_id], idx+200000-1)
     end
     for (idx, cluster_id) in enumerate(assignment_DC)
-        push!(clusters[cluster_id + 1000], idx + 500000 - 1)  # Offset voor DC indices
+        push!(clusters[cluster_id + 1200], idx + 500000 - 1)  # Offset voor DC indices
     end
 
     
@@ -177,7 +339,15 @@ function PTDF_analysis_full(nodal_input,nodal_result,number_of_hours,ne_branch,n
     #plot_branches(zone_grid, cluster,plot_filename)
 
         # Verzamel de geselecteerde kolommen
-    selected_indices_AC = collect(values(cluster_to_index_AC))
+    cl_WF=[]
+    for (b,branch) in ne_branch
+        if branch["f_bus"] > 50000 && branch["t_bus"] < 20000
+            push!(cl_WF,parse(Int,b))
+        end
+    end
+    cl_WF = cl_WF.-(200000-1)
+
+    selected_indices_AC = vcat(collect(values(cluster_to_index_AC)),cl_WF)
     selected_indices_DC = collect(values(cluster_to_index_DC)) .+ length(ne_branch)  # Offset voor DC indices
     selected_indices = vcat(selected_indices_AC, selected_indices_DC)
     selected_indices_sorted = sort(selected_indices)
@@ -186,17 +356,16 @@ function PTDF_analysis_full(nodal_input,nodal_result,number_of_hours,ne_branch,n
     Powerflow_reduced = Powerflow_matrix[:, selected_indices_sorted]
 
     println("Start computing Lambda matrix")
-    Lambda_matrix_ext = get_dual_branch(AC_branches, result_OPF_w,number_of_hours,1)
-    
+    Lambda_matrix3 = get_dual_branch(AC_branches, result_OPF2,number_of_hours,1)
     threshold = 600
-    num_above_threshold = count(x -> x > threshold, Lambda_matrix_ext)
-    total_elements = length(Lambda_matrix_ext)
+    num_above_threshold = count(x -> x > threshold, Lambda_matrix3)
+    total_elements = length(Lambda_matrix3)
     upper_pct = 1.0 - (num_above_threshold / total_elements)
-    winsorize_matrix!(Lambda_matrix_ext, 0, upper_pct)
+    winsorize_matrix!(Lambda_matrix3, 0, upper_pct)
 
 
     println("Start computing Impact matrix")
-    @time Impact_matrix_ext = map(h -> Powerflow_reduced .* Lambda_matrix_ext[:, h], 1:number_of_hours)
+    @time Impact_matrix3 = map(h -> Powerflow_reduced .* Lambda_matrix3[:, h], 1:number_of_hours)
     #Impact_matrix = Powerflow_matrix .* reshape(Lambda_matrix, size(PTDF_matrix,1), 1, number_of_hours)
     #Impact_matrix = Array{Float32}(undef, size(Powerflow_matrix, 1), size(Powerflow_matrix, 2), number_of_hours)
     #for h in 1:number_of_hours
@@ -204,7 +373,7 @@ function PTDF_analysis_full(nodal_input,nodal_result,number_of_hours,ne_branch,n
     #end    
     
 
-    return Impact_matrix   
+    return Impact_matrix
 end
 
 function pre_processor()
@@ -213,7 +382,7 @@ function pre_processor()
     ne_branch, ne_branchDC, AC_new_corridor_idx, DC_new_corridor_idx = candidate_lines_ext(nodal_input,new_DC_buses)
 
     #2: Include cost data for every candidate (AC & DC)
-    ne_branch, ne_branchDC = update_cost_data(ne_branch,ne_branchDC,nodal_input)
+    ne_branch_c, ne_branchDC_c = update_cost_data(ne_branch,ne_branchDC,nodal_input)
 
     #3: Create the PowerFlow matrix & Impact matrix for all candidate_lines
     Impact_matrix = PTDF_analysis_full(nodal_input,nodal_result,number_of_hours,ne_branch,ne_branchDC)
@@ -225,19 +394,19 @@ function pre_processor()
     ImpactDC = zeros(Float64, length(selected_indices_DC), 2)
     PB_AC = zeros(Float64, length(selected_indices_AC),2)
     PB_DC = zeros(Float64, length(selected_indices_DC),2)
-    PIB_AC = zeros(Float64, length(selected_indices_AC),2)
-    PIB_DC = zeros(Float64, length(selected_indices_DC),2)
+    PIB_AC= zeros(Float64, length(selected_indices_AC),2)
+    PIB_DC_c = zeros(Float64, length(selected_indices_DC),2)
     Lambda_AC = zeros(Float64, length(selected_indices_AC),2)
     Lambda_DC = zeros(Float64, length(selected_indices_DC),2)
     Cost_AC = zeros(Float64, length(selected_indices_AC),2)
-    Cost_DC = zeros(Float64, length(selected_indices_DC),2)
+    Cost_DC_c = zeros(Float64, length(selected_indices_DC),2)
     Total_Cost_AC = zeros(Float64, length(selected_indices_AC),2)
-    Total_Cost_DC = zeros(Float64, length(selected_indices_DC),2)
+    Total_Cost_DC_c = zeros(Float64, length(selected_indices_DC),2)
 
     for i in 1:length(selected_indices_AC)
         som = 0.0
-        for h in 1:length(Impact_matrix_ext)
-            som += sum(Impact_matrix_ext[h][:, i]) * factor[h]   #IN CASE OF REPRESENTATIVE TIMESTEPS ADD FACTOR[h]
+        for h in 1:length(Impact_matrix)
+            som += sum(Impact_matrix[h][:, i]) * factor[h]   #IN CASE OF REPRESENTATIVE TIMESTEPS ADD FACTOR[h]
         end
         idx = sort(selected_indices_AC)[i]
         lambda_f = []
@@ -265,8 +434,8 @@ function pre_processor()
             
     for i in 1:length(selected_indices_DC)
         som = 0.0
-        for h in 1:length(Impact_matrix_ext)
-            som += sum(Impact_matrix_ext[h][:, i]) * factor[h]   #IN CASE OF REPRESENTATIVE TIMESTEPS ADD FACTOR[h]
+        for h in 1:length(Impact_matrix)
+            som += sum(Impact_matrix[h][:, i]) * factor[h]   #IN CASE OF REPRESENTATIVE TIMESTEPS ADD FACTOR[h]
         end
         lambda_f = []
         lambda_t = []
@@ -299,9 +468,9 @@ function pre_processor()
         AC_index = idx + 200000 - 1
         PB_AC[i, 1] = AC_index
         #println( Potential_investment_benefit(AC_index,number_of_hours,start_hour))
-        PB_AC[i, 2] = Potential_investment_benefit(AC_index,number_of_hours,start_hour)
+        PB_AC[i, 2] = Potential_investment_benefit(AC_index,number_of_hours,start_hour,nodal_result)
         Lambda_AC[i,1] = AC_index
-        Lambda_AC[i,2] =  delta_lambda(AC_index,number_of_hours,start_hour)
+        Lambda_AC[i,2] =  delta_lambda(AC_index,number_of_hours,start_hour,nodal_result)
         Cost_AC[i,1] = AC_index
         Cost_AC[i,2] =  ne_branch["$AC_index"]["construction_cost"]
         Total_Cost_AC[i,1] = AC_index
@@ -314,15 +483,15 @@ function pre_processor()
         idx = sort(selected_indices_DC)[i]
         DC_index = idx + 500000 - length(ne_branch) - 1
         PB_DC[i,1] = DC_index
-        PB_DC[i,2] =  Potential_investment_benefit(DC_index,number_of_hours,start_hour)
+        PB_DC[i,2] =  Potential_investment_benefit(DC_index,number_of_hours,start_hour,nodal_result)
         Lambda_DC[i,1] = DC_index
-        Lambda_DC[i,2] =  delta_lambda(DC_index,number_of_hours,start_hour)
-        Cost_DC[i,1] = DC_index
-        Cost_DC[i,2] =   ne_branchDC["$DC_index"]["cost"]
-        Total_Cost_DC[i,1] = DC_index
-        Total_Cost_DC[i,2] =  ne_branchDC["$DC_index"]["cost"]*8760
-        PIB_DC[i,1] = DC_index
-        PIB_DC[i,2] = PB_DC[i,2] / Total_Cost_DC[i,2] 
+        Lambda_DC[i,2] =  delta_lambda(DC_index,number_of_hours,start_hour,nodal_result)
+        Cost_DC_c[i,1] = DC_index
+        Cost_DC_c[i,2] =   ne_branchDC["$DC_index"]["cost"]
+        Total_Cost_DC_c[i,1] = DC_index
+        Total_Cost_DC_c[i,2] =  ne_branchDC["$DC_index"]["cost"]*8760
+        PIB_DC_c[i,1] = DC_index
+        PIB_DC_c[i,2] = PB_DC[i,2] / Total_Cost_DC_c[i,2] 
     end
 
     
@@ -401,8 +570,8 @@ function pre_processor()
     ### Create Excel file voor resultaten ###
     #########################################
 
-    filename = "Impact_North_AC.xlsx"
-    headers = ["Index", "Impact Sum","PB","Lamba_diff", "Cost", "PIB"]
+    filename = "Impact_North_AC_c1.xlsx"
+    headers = ["Index", "Impact Sum","PB","Lamba_diff", "Cost", "Total_Cost","PIB"]
 
         # Open een nieuw Excel-bestand en schrijf de vector naar de eerste kolom
         XLSX.openxlsx(filename, mode="w") do xf
@@ -413,18 +582,20 @@ function pre_processor()
             sheet[1, 4] = headers[4]
             sheet[1, 5] = headers[5]
             sheet[1, 6] = headers[6]
+            sheet[1, 7] = headers[7]
             for i in 1:size(ImpactAC, 1)
                 sheet[i+1, 1] = ImpactAC[i, 1]
                 sheet[i+1, 2] = ImpactAC[i, 2]
                 sheet[i+1, 3] = PB_AC[i,2]
                 sheet[i+1, 4] = Lambda_AC[i,2]
                 sheet[i+1, 5] = Cost_AC[i,2]
-                sheet[i+1, 6] = PIB_AC[i,2]
+                sheet[i+1, 6] = Total_Cost_AC[i,2]
+                sheet[i+1, 7] = PIB_AC[i,2]
             end
         end
     
-    filename = "Impact_North_DC.xlsx"
-    headers = ["Index", "Impact Sum","PB","Lamba_diff", "Cost", "PIB"]
+    filename = "Impact_North_DC_c1.xlsx"
+    headers = ["Index", "Impact Sum","PB","Lamba_diff", "Cost", "Total_Cost","PIB"]
 
         # Open een nieuw Excel-bestand en schrijf de vector naar de eerste kolom
         XLSX.openxlsx(filename, mode="w") do xf
@@ -435,13 +606,15 @@ function pre_processor()
             sheet[1, 4] = headers[4]
             sheet[1, 5] = headers[5]
             sheet[1, 6] = headers[6]
+            sheet[1, 7] = headers[7]
             for i in 1:size(ImpactDC, 1)
                 sheet[i+1, 1] = ImpactDC[i, 1]
                 sheet[i+1, 2] = ImpactDC[i, 2]
                 sheet[i+1, 3] = PB_DC[i,2]
                 sheet[i+1, 4] = Lambda_DC[i,2]
-                sheet[i+1, 5] = Cost_DC[i,2]
-                sheet[i+1, 6] = PIB_DC[i,2]
+                sheet[i+1, 5] = Cost_DC_c[i,2]
+                sheet[i+1, 6] = Total_Cost_DC_c[i,2]
+                sheet[i+1, 7] = PIB_DC_c[i,2]
             end
         end
  
@@ -650,22 +823,27 @@ function pre_processor()
     ImpactAC_sorted = ImpactAC[sortperm(ImpactAC[:, 2], rev = true), :]
     ImpactDC_sorted = ImpactDC[sortperm(ImpactDC[:, 2], rev = true), :]
     PIB_AC_sorted = PIB_AC[sortperm(PIB_AC[:, 2], rev = true), :]
-    PIB_DC_sorted = PIB_DC[sortperm(PIB_DC[:, 2], rev = true), :]
-    n_topAC = ceil(Int, 0.05 * size(ImpactAC_sorted, 1))  # aantal bovenste elementen
-    n_topDC = ceil(Int, 0.12 * size(PIB_DC_sorted, 1))
-    top_indicesAC = ImpactAC_sorted[1:n_topAC, 1] 
-    top_indicesDC = PIB_DC_sorted[1:n_topDC, 1] 
-    
-    random_indices_AC = rand(ImpactAC_sorted[:,1], 10)
-    random_indices_DC = rand(ImpactDC_sorted[:,1], 5)
+    PIB_DC_sorted = PIB_DC_c[sortperm(PIB_DC_c[:, 2], rev = true), :]
+    n_topAC = ceil(Int, 0.055 * size(ImpactAC_sorted, 1))  # aantal bovenste elementen
+    n_topDC = ceil(Int, 0.16 * size(PIB_DC_sorted, 1))
+    top_indicesAC_c1t = ImpactAC_sorted[1:n_topAC, 1] 
+    top_indicesDC_c1t = PIB_DC_sorted[1:n_topDC, 1] 
 
-    final_indices = vcat(top_indicesAC,top_indicesDC,random_indices_AC,random_indices_DC)  # VOEG EVENTUEEL RANDOM INDICES TOE OM TE CHECKEN
-    final_indices = unique(final_indices)
+    #top_indicesAC3 = setdiff(top_indicesAC3, intersect(parse.(Int,built_AC1), top_indicesAC))
+    #top_indicesDC3 = setdiff(top_indicesDC3, intersect(parse.(Int,built_DC1), top_indicesDC))
+    #top_indicesAC3 = setdiff(top_indicesAC3, intersect(parse.(Int,built_AC2), top_indicesAC2))
+    #top_indicesDC3 = setdiff(top_indicesDC3, intersect(parse.(Int,built_DC2), top_indicesDC2))
+    
+    random_indices_AC_c1 = #rand(ImpactAC_sorted[:,1], 10)
+    random_indices_DC_c1 = #rand(PIB_DC_sorted[:,1], 5)
+
+    final_indices_c1 = vcat(top_indicesAC,top_indicesDC_c1t,random_indices_AC,random_indices_DC)  # VOEG EVENTUEEL RANDOM INDICES TOE OM TE CHECKEN
+    final_indices_c1 = unique(final_indices_c1)
 
 
     corrected_indices_AC = []
     corrected_indices_DC = []
-    for i in final_indices
+    for i in final_indices_c1
         if i < 500000
             i = Int(i)
             push!(corrected_indices_AC,i)
@@ -677,12 +855,12 @@ function pre_processor()
 
     
         #4: Update zone_grid for TNEP problem
-    zone_grid = deepcopy(nodal_input_ext)
-    zone_grid["ne_branch"] = Dict{String,Any}()
-    zone_grid["branchdc_ne"] = Dict{String,Any}()
+    zone_grid_c1t = deepcopy(nodal_input)
+    zone_grid_c1t["ne_branch"] = Dict{String,Any}()
+    zone_grid_c1t["branchdc_ne"] = Dict{String,Any}()
 
-    for i in corrected_indices_AC##keys(ne_branch)#
-        zone_grid["ne_branch"]["$i"] = ne_branch["$i"]
+    for i in corrected_indices_AC##keys(ne_branch)#corrected_indices_AC##
+        zone_grid_c1t["ne_branch"]["$i"] = deepcopy(ne_branch_c["$i"])
     end
     #=for (i,branch) in ne_branch
         if haskey(branch, "WF_conn")
@@ -691,9 +869,19 @@ function pre_processor()
             end
         end
     end =#
-    for i in corrected_indices_DC##keys(ne_branchDC)#
-        zone_grid["branchdc_ne"]["$i"] = ne_branchDC["$i"]
+    for i in corrected_indices_DC##keys(ne_branchDC)#corrected_indices_DC##k
+        zone_grid_c1t["branchdc_ne"]["$i"] = deepcopy(ne_branchDC_c["$i"])
     end
+
+    zone_grid_final_c1t = deepcopy(zone_grid_c1t)
+    for (b,branch) in zone_grid_final_c1t["branch"]
+        if branch["rate_a"] == 0.01
+            println(b)
+            pop!(zone_grid_final_c1t["branch"],b)
+        end
+    end
+
+    zone_grid_final = correct_parallel_lines(zone_grid)
 
     
 end

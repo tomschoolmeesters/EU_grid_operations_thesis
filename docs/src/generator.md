@@ -1,6 +1,6 @@
 # Analyse generators
 
-#### Analyse\_generator
+## Analyse\_generator
 
 Analyzes the generation profile and curtailment behavior of a specified generator over a selected time window within a planning year. It visualizes the power output, highlights infeasible simulation periods, and (for RES generators) computes and plots curtailment metrics.
 
@@ -25,8 +25,9 @@ Analyzes the generation profile and curtailment behavior of a specified generato
 ```julia
 function Analyse_generator(g,start_hour,number_of_hours,nodal_input,nodal_result,timeseries_data)
 ```   
+---
 
-#### Analyse\_generation\_types
+## Analyse\_generation\_types
 
 Analyse and visualize electricity generation by generator type and storage over a specified range of hours.
 
@@ -45,14 +46,14 @@ Analyse and visualize electricity generation by generator type and storage over 
     5. Plots generation vs. load over time for the selected types.
 
 - Note
-    - Be careful when using a result based on the reduced timeseries. If you use a reduced timeseries and want to plot the 
-    pie diagram for a full year, you need to adjust the values using the corresponding factor. (not implemented here yet)
+    - Be careful when using a result based on the reduced timeseries. If you use a reduced timeseries and want to plot the pie diagram for a full year, you need to adjust the values using the corresponding factor. (not implemented here yet)
 
 ```julia
 function Analyse_generation_types(hour_range,start_hour,nodal_input,nodal_result)
 ```
+---
 
-#### Capacity\_installed
+## Capacity\_installed
 
 Compute the total installed generation capacity per generator type.
 
@@ -70,8 +71,9 @@ Compute the total installed generation capacity per generator type.
 ```julia
 function Capacity_installed(nodal_input)
 ```
+---
 
-#### RES\_curtailment\_WO
+## RES\_curtailment\_WO
 
 Computes the hourly curtailment profile for a specific renewable energy generator (Solar PV, Offshore Wind, or Onshore Wind) over a simulation period.
 
@@ -99,8 +101,9 @@ Computes the hourly curtailment profile for a specific renewable energy generato
 ```julia
 function RES_curtailment_WO(g, gen_type, result, input, timeseries, start_hour, number_of_hours)
 ```
+---
 
-#### OFF\_curtailment\_red
+## OFF\_curtailment\_red
 
 Calculates the overall offshore wind curtailment ratio over a reduced set of time steps, 
 accounting for hourly weighting factors.
@@ -125,8 +128,9 @@ accounting for hourly weighting factors.
 ```julia
 function OFF_curtailment_red(nodal_input,nodal_result,timeseries_red,factor,number_of_hours)
 ```
+---
 
-#### where\_curtailment
+## where\_curtailment
 
 Identifies which renewable generators (Solar PV, Onshore Wind, Offshore Wind) experienced significant curtailment
 based on a predefined condition. Specifically, it flags generators where the curtailment exceeds 80% for more than 50% of the time.
